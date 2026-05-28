@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
+import 'germeen.dart';
 
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -8,11 +8,13 @@ class EmptyState extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.action,
+    this.mood = GermeenMood.sleepy,
   });
 
   final String title;
   final String? subtitle;
   final Widget? action;
+  final GermeenMood mood;
 
   @override
   Widget build(BuildContext context) {
@@ -22,19 +24,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              height: 120,
-              width: 120,
-              decoration: BoxDecoration(
-                color: CupetColors.primary.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                '🐾',
-                style: TextStyle(fontSize: 64),
-              ),
-            ),
+            Germeen(size: 140, mood: mood),
             const SizedBox(height: 24),
             Text(
               title,

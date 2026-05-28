@@ -43,12 +43,14 @@ Compile-time configuration via `--dart-define`:
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `API_BASE_URL` | `http://10.0.2.2:8000/api/v1` | Laravel API base URL (Android emulator default) |
+| `API_BASE_URL` | `https://cupet.semantik-code.com/api/v1` | Laravel API base URL |
 | `REVERB_APP_KEY` | `cupet-key` | Must match `REVERB_APP_KEY` in the backend `.env` |
-| `REVERB_HOST` | `10.0.2.2` | Laravel Reverb host |
-| `REVERB_PORT` | `8080` | Laravel Reverb port |
-| `REVERB_SCHEME` | `http` | `http` or `https` |
-| `BROADCASTING_AUTH_URL` | `http://10.0.2.2:8000/broadcasting/auth` | Sanctum-auth endpoint Reverb calls for private channels |
+| `REVERB_HOST` | `cupet.semantik-code.com` | Laravel Reverb host |
+| `REVERB_PORT` | `443` | Laravel Reverb port |
+| `REVERB_SCHEME` | `https` | `http` or `https` |
+| `BROADCASTING_AUTH_URL` | `https://cupet.semantik-code.com/broadcasting/auth` | Sanctum-auth endpoint Reverb calls for private channels |
+
+For local backend dev, override with `--dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1` (Android emulator) or `http://127.0.0.1:8000/api/v1` (iOS simulator) plus the matching `REVERB_*` values.
 
 Firebase: drop `google-services.json` (Android) / `GoogleService-Info.plist` (iOS)
 into the platform folders, then run `flutterfire configure` to generate
@@ -58,18 +60,23 @@ into the platform folders, then run `flutterfire configure` to generate
 
 ```bash
 flutter pub get
+flutter run                                # uses cupet.semantik-code.com defaults
+flutter run --release                      # release build
+```
+
+To target a local Laravel + Reverb instead of production:
+
+```bash
 flutter run \
   --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1 \
-  --dart-define=REVERB_APP_KEY=cupet-key \
   --dart-define=REVERB_HOST=10.0.2.2 \
   --dart-define=REVERB_PORT=8080 \
   --dart-define=REVERB_SCHEME=http \
   --dart-define=BROADCASTING_AUTH_URL=http://10.0.2.2:8000/broadcasting/auth
 ```
 
-iOS simulator: replace `10.0.2.2` with `127.0.0.1`.
-Physical device: use your machine's LAN IP for both `API_BASE_URL` and
-`REVERB_HOST`.
+iOS simulator: replace `10.0.2.2` with `127.0.0.1`. Physical device on the same
+LAN: use your machine's LAN IP.
 
 ## Realtime + push
 

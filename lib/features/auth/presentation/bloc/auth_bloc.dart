@@ -33,6 +33,40 @@ class AuthLoggedOut extends AuthEvent {
   const AuthLoggedOut();
 }
 
+/// Permanently delete the current account (App Store Guideline 5.1.1(v)).
+/// On success the user ends up unauthenticated; on failure we stay
+/// authenticated and surface [AuthState.errorMessage].
+class AuthAccountDeleted extends AuthEvent {
+  const AuthAccountDeleted();
+}
+
+/// Abandon the in-progress OTP flow and go back to phone entry so the user
+/// can send the code to a different number. No backend call: there is no
+/// session yet, only a pending verification to discard.
+class AuthOtpCancelled extends AuthEvent {
+  const AuthOtpCancelled();
+}
+
+class AuthProfileUpdated extends AuthEvent {
+  const AuthProfileUpdated({
+    this.name,
+    this.email,
+    this.avatarUrl,
+    this.clearEmail = false,
+    this.clearAvatarUrl = false,
+  });
+
+  final String? name;
+  final String? email;
+  final String? avatarUrl;
+  final bool clearEmail;
+  final bool clearAvatarUrl;
+
+  @override
+  List<Object?> get props =>
+      [name, email, avatarUrl, clearEmail, clearAvatarUrl];
+}
+
 class _AuthCodeSent extends AuthEvent {
   const _AuthCodeSent(this.pending);
   final PendingPhoneVerification pending;
@@ -107,6 +141,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthOtpRequested>(_onOtpRequested);
     on<AuthOtpSubmitted>(_onOtpSubmitted);
     on<AuthLoggedOut>(_onLogout);
+    on<AuthAccountDeleted>(_onAccountDeleted);
+    on<AuthOtpCancelled>((event, emit) =>
+        emit(const AuthState(status: AuthStatus.unauthenticated)));
+    on<AuthProfileUpdated>(_onProfileUpdated);
     on<_AuthCodeSent>((event, emit) => emit(state.copyWith(
           status: AuthStatus.awaitingOtp,
           pending: event.pending,
@@ -188,8 +226,59 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  Future<void> _onProfileUpdated(
+    AuthProfileUpdated event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      final user = await _repository.updateProfile(
+        name: event.name,
+        email: event.email,
+        avatarUrl: event.avatarUrl,
+        clearEmail: event.clearEmail,
+        clearAvatarUrl: event.clearAvatarUrl,
+      );
+      // Stay authenticated; just swap the user payload.
+      emit(state.copyWith(
+        status: AuthStatus.authenticated,
+        user: user,
+        clearError: true,
+      ));
+    } catch (e) {
+      // Stay authenticated; surface the message via state.errorMessage so the
+      // edit page can show it without bouncing the user back to /auth.
+      emit(state.copyWith(
+        status: AuthStatus.authenticated,
+        errorMessage: e is Failure ? e.message : e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onAccountDeleted(
+    AuthAccountDeleted event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      await _repository.deleteAccount();
+      emit(const AuthState(status: AuthStatus.unauthenticated));
+    } catch (e) {
+      // Deletion failed on the server — keep the user signed in and surface
+      // the error rather than stranding them in a half-deleted state.
+      emit(state.copyWith(
+        status: AuthStatus.authenticated,
+        errorMessage: e is Failure ? e.message : e.toString(),
+      ));
+    }
+  }
+
   Future<void> _onLogout(AuthLoggedOut event, Emitter<AuthState> emit) async {
-    await _repository.logout();
+    try {
+      await _repository.logout();
+    } catch (_) {
+      // Ignore: the repository already swallows backend/Firebase failures,
+      // but guard here too so a stray throw can never strand the user on
+      // an authenticated screen.
+    }
     emit(const AuthState(status: AuthStatus.unauthenticated));
   }
 }

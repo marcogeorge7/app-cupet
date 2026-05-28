@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/models/pet.dart';
+import '../../../../shared/widgets/germeen.dart';
 
 class PetCard extends StatelessWidget {
   const PetCard({super.key, required this.pet});
@@ -19,9 +20,9 @@ class PetCard extends StatelessWidget {
             CachedNetworkImage(
               imageUrl: pet.primaryPhotoUrl!,
               fit: BoxFit.cover,
-              placeholder: (_, __) =>
+              placeholder: (_, _) =>
                   const Center(child: CircularProgressIndicator()),
-              errorWidget: (_, __, ___) => _placeholder(context),
+              errorWidget: (_, _, _) => _placeholder(context),
             )
           else
             _placeholder(context),
@@ -79,6 +80,10 @@ class PetCard extends StatelessWidget {
   Widget _placeholder(BuildContext context) => Container(
         color: Theme.of(context).colorScheme.primary,
         alignment: Alignment.center,
-        child: const Text('🐾', style: TextStyle(fontSize: 80)),
+        child: const Germeen(
+          size: 200,
+          mood: GermeenMood.sweet,
+          background: Colors.transparent,
+        ),
       );
 }

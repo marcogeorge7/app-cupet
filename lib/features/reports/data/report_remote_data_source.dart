@@ -13,7 +13,7 @@ class ReportRemoteDataSource {
     await _dio.post('/reports', data: {
       'reported_pet_id': petId,
       'reason': reason,
-      if (details != null) 'details': details,
+      'details': ?details,
     });
   }
 }

@@ -9,7 +9,7 @@ class MatchRemoteDataSource {
 
   Future<List<PetMatch>> list({int? petId}) async {
     final response = await _dio.get('/matches', queryParameters: {
-      if (petId != null) 'pet_id': petId,
+      'pet_id': ?petId,
     });
     final list = (response.data as Map<String, dynamic>)['data'] as List;
     return list

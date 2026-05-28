@@ -2,8 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../features/auth/data/auth_remote_data_source.dart';
+import '../../features/auth/data/country_remote_data_source.dart';
 import '../../features/auth/domain/auth_repository.dart';
+import '../messaging/active_chat_tracker.dart';
 import '../messaging/fcm_service.dart';
+import '../navigation/navigation_service.dart';
 import '../../features/chat/data/message_remote_data_source.dart';
 import '../../features/discover/data/discover_remote_data_source.dart';
 import '../../features/matches/data/match_remote_data_source.dart';
@@ -11,7 +14,8 @@ import '../../features/profile/data/pet_remote_data_source.dart';
 import '../../features/profile/domain/pet_repository.dart';
 import '../../features/reports/data/report_remote_data_source.dart';
 import '../network/dio_client.dart';
-import '../realtime/reverb_client.dart';
+import '../realtime/realtime_user_service.dart';
+import '../realtime/socket_client.dart';
 import '../storage/secure_token_storage.dart';
 
 final getIt = GetIt.instance;
@@ -19,9 +23,14 @@ final getIt = GetIt.instance;
 void configureInjector() {
   getIt.registerLazySingleton<SecureTokenStorage>(SecureTokenStorage.new);
   getIt.registerLazySingleton<Dio>(() => buildDioClient(getIt()));
-  getIt.registerLazySingleton<ReverbClient>(
-    () => ReverbClient(getIt(), getIt()),
+  getIt.registerLazySingleton<SocketHubClient>(
+    () => SocketHubClient(getIt()),
   );
+  getIt.registerLazySingleton<RealtimeUserService>(
+    () => RealtimeUserService(getIt()),
+  );
+  getIt.registerLazySingleton<NavigationService>(NavigationService.new);
+  getIt.registerLazySingleton<ActiveChatTracker>(ActiveChatTracker.new);
 
   getIt.registerLazySingleton<AuthRemoteDataSource>(
     () => AuthRemoteDataSource(getIt()),
@@ -29,7 +38,12 @@ void configureInjector() {
   getIt.registerLazySingleton<AuthRepository>(
     () => AuthRepository(remote: getIt(), storage: getIt()),
   );
-  getIt.registerLazySingleton<FcmService>(() => FcmService(getIt()));
+  getIt.registerLazySingleton<CountryRemoteDataSource>(
+    () => CountryRemoteDataSource(getIt()),
+  );
+  getIt.registerLazySingleton<FcmService>(
+    () => FcmService(getIt(), getIt(), getIt(), getIt()),
+  );
 
   getIt.registerLazySingleton<PetRemoteDataSource>(
     () => PetRemoteDataSource(getIt()),

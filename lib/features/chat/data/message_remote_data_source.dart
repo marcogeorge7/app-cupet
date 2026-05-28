@@ -11,7 +11,7 @@ class MessageRemoteDataSource {
     final response = await _dio.get(
       '/conversations/$conversationId/messages',
       queryParameters: {
-        if (beforeId != null) 'before_id': beforeId,
+        'before_id': ?beforeId,
       },
     );
     final list = (response.data as Map<String, dynamic>)['data'] as List;

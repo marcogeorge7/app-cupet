@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/injector.dart';
+import '../../../../core/realtime/realtime_user_service.dart';
+import '../../../../shared/widgets/cupet_logo.dart';
 import '../../../../shared/widgets/empty_state.dart';
+import '../../../../shared/widgets/germeen.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../reports/presentation/report_sheet.dart';
 import '../bloc/matches_bloc.dart';
@@ -16,17 +22,33 @@ class MatchesPage extends StatefulWidget {
 }
 
 class _MatchesPageState extends State<MatchesPage> {
+  StreamSubscription<RealtimeUserEvent>? _realtimeSub;
+
   @override
   void initState() {
     super.initState();
     context.read<MatchesBloc>().add(const MatchesLoaded());
+    // MatchesBloc is route-scoped, so the app-wide RealtimeUserService can't
+    // reach it directly — bridge its events into a reload here (same pattern
+    // ChatBloc uses for the Reverb stream).
+    _realtimeSub = getIt<RealtimeUserService>().events.listen((_) {
+      if (mounted) {
+        context.read<MatchesBloc>().add(const MatchesLoaded());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final userId = context.watch<AuthBloc>().state.user?.id ?? -1;
     return Scaffold(
-      appBar: AppBar(title: const Text('Matches')),
+      appBar: AppBar(title: const CupetWordmarkLogo(height: 28)),
       body: BlocBuilder<MatchesBloc, MatchesState>(
         builder: (context, state) {
           if (state.status == MatchesStatus.loading && state.matches.isEmpty) {
@@ -43,20 +65,18 @@ class _MatchesPageState extends State<MatchesPage> {
                 context.read<MatchesBloc>().add(const MatchesLoaded()),
             child: ListView.separated(
               itemCount: state.matches.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final match = state.matches[index];
                 final other = match.otherPetFor(userId);
                 return ListTile(
-                  leading: CircleAvatar(
-                    radius: 28,
-                    backgroundImage: other.primaryPhotoUrl != null
-                        ? CachedNetworkImageProvider(other.primaryPhotoUrl!)
-                        : null,
-                    child: other.primaryPhotoUrl == null
-                        ? const Text('🐾')
-                        : null,
-                  ),
+                  leading: other.primaryPhotoUrl != null
+                      ? CircleAvatar(
+                          radius: 28,
+                          backgroundImage: CachedNetworkImageProvider(
+                              other.primaryPhotoUrl!),
+                        )
+                      : const Germeen(size: 56, mood: GermeenMood.sassy),
                   title: Text(other.name),
                   subtitle: Text(
                       '${other.type.name.toUpperCase()} · ${other.gender.name}'),

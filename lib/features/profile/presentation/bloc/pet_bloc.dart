@@ -26,6 +26,7 @@ class PetCreated extends PetEvent {
     this.lng,
     this.locationName,
     this.primaryPhotoUrl,
+    this.photoFilePath,
   });
 
   final PetType type;
@@ -37,10 +38,73 @@ class PetCreated extends PetEvent {
   final double? lng;
   final String? locationName;
   final String? primaryPhotoUrl;
+  final String? photoFilePath;
 
   @override
-  List<Object?> get props =>
-      [type, gender, name, bio, birthdate, lat, lng, locationName, primaryPhotoUrl];
+  List<Object?> get props => [
+        type,
+        gender,
+        name,
+        bio,
+        birthdate,
+        lat,
+        lng,
+        locationName,
+        primaryPhotoUrl,
+        photoFilePath,
+      ];
+}
+
+class PetUpdated extends PetEvent {
+  const PetUpdated({
+    required this.id,
+    this.type,
+    this.gender,
+    this.name,
+    this.bio,
+    this.clearBio = false,
+    this.birthdate,
+    this.clearBirthdate = false,
+    this.lat,
+    this.lng,
+    this.locationName,
+    this.clearLocationName = false,
+    this.primaryPhotoUrl,
+    this.photoFilePath,
+  });
+
+  final int id;
+  final PetType? type;
+  final PetGender? gender;
+  final String? name;
+  final String? bio;
+  final bool clearBio;
+  final DateTime? birthdate;
+  final bool clearBirthdate;
+  final double? lat;
+  final double? lng;
+  final String? locationName;
+  final bool clearLocationName;
+  final String? primaryPhotoUrl;
+  final String? photoFilePath;
+
+  @override
+  List<Object?> get props => [
+        id,
+        type,
+        gender,
+        name,
+        bio,
+        clearBio,
+        birthdate,
+        clearBirthdate,
+        lat,
+        lng,
+        locationName,
+        clearLocationName,
+        primaryPhotoUrl,
+        photoFilePath,
+      ];
 }
 
 class PetDeleted extends PetEvent {
@@ -83,6 +147,7 @@ class PetBloc extends Bloc<PetEvent, PetState> {
   PetBloc(this._repository) : super(const PetState()) {
     on<PetsLoaded>(_onLoad);
     on<PetCreated>(_onCreate);
+    on<PetUpdated>(_onUpdate);
     on<PetDeleted>(_onDelete);
   }
 
@@ -101,7 +166,7 @@ class PetBloc extends Bloc<PetEvent, PetState> {
   Future<void> _onCreate(PetCreated event, Emitter<PetState> emit) async {
     emit(state.copyWith(status: PetStatus.loading, clearError: true));
     try {
-      final pet = await _repository.create(
+      var pet = await _repository.create(
         type: event.type,
         gender: event.gender,
         name: event.name,
@@ -112,7 +177,74 @@ class PetBloc extends Bloc<PetEvent, PetState> {
         locationName: event.locationName,
         primaryPhotoUrl: event.primaryPhotoUrl,
       );
+      if (event.photoFilePath != null) {
+        try {
+          pet = await _repository.uploadPrimaryPhoto(
+            petId: pet.id,
+            filePath: event.photoFilePath!,
+          );
+        } catch (_) {
+          // photo upload best-effort — pet still saved
+        }
+      }
       emit(state.copyWith(status: PetStatus.ready, pets: [pet, ...state.pets]));
+    } on Failure catch (e) {
+      emit(state.copyWith(status: PetStatus.error, errorMessage: e.message));
+    }
+  }
+
+  Future<void> _onUpdate(PetUpdated event, Emitter<PetState> emit) async {
+    emit(state.copyWith(status: PetStatus.loading, clearError: true));
+    try {
+      // Build a sparse PUT payload: only include fields the caller actually
+      // changed, so the backend's `sometimes`/`nullable` rules behave as
+      // expected and we never overwrite existing values with `null` by
+      // accident. The `clear*` flags let the form explicitly null a field.
+      final payload = <String, dynamic>{};
+      if (event.type != null) payload['type'] = event.type!.name;
+      if (event.gender != null) payload['gender'] = event.gender!.name;
+      if (event.name != null) payload['name'] = event.name;
+      if (event.clearBio) {
+        payload['bio'] = null;
+      } else if (event.bio != null) {
+        payload['bio'] = event.bio;
+      }
+      if (event.clearBirthdate) {
+        payload['birthdate'] = null;
+      } else if (event.birthdate != null) {
+        payload['birthdate'] =
+            event.birthdate!.toIso8601String().substring(0, 10);
+      }
+      if (event.lat != null) payload['location_lat'] = event.lat;
+      if (event.lng != null) payload['location_lng'] = event.lng;
+      if (event.clearLocationName) {
+        payload['location_name'] = null;
+      } else if (event.locationName != null) {
+        payload['location_name'] = event.locationName;
+      }
+      if (event.primaryPhotoUrl != null) {
+        payload['primary_photo_url'] = event.primaryPhotoUrl;
+      }
+
+      var pet = payload.isEmpty
+          ? state.pets.firstWhere((p) => p.id == event.id)
+          : await _repository.update(event.id, payload);
+
+      if (event.photoFilePath != null) {
+        try {
+          pet = await _repository.uploadPrimaryPhoto(
+            petId: event.id,
+            filePath: event.photoFilePath!,
+          );
+        } catch (_) {
+          // photo upload best-effort — text fields already saved
+        }
+      }
+
+      final next = state.pets
+          .map((p) => p.id == pet.id ? pet : p)
+          .toList(growable: false);
+      emit(state.copyWith(status: PetStatus.ready, pets: next));
     } on Failure catch (e) {
       emit(state.copyWith(status: PetStatus.error, errorMessage: e.message));
     }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "987097294552",
+    "project_id": "cupet-4029f",
+    "storage_bucket": "cupet-4029f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:987097294552:android:11e41cd206e6680f9c19ad",
+        "android_client_info": {
+          "package_name": "app.cupet.cupet_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjI8gujjrVOFcDKeSMKq2NexZRgFU07zE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

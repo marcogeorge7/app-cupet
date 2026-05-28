@@ -17,7 +17,7 @@ class DiscoverRemoteDataSource {
   Future<List<Pet>> deck({required int petId, double? radiusKm}) async {
     final response = await _dio.get('/discover', queryParameters: {
       'pet_id': petId,
-      if (radiusKm != null) 'radius_km': radiusKm,
+      'radius_km': ?radiusKm,
     });
     final list = (response.data as Map<String, dynamic>)['data'] as List;
     return list.map((e) => Pet.fromJson(e as Map<String, dynamic>)).toList();

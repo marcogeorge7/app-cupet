@@ -34,12 +34,19 @@ Future<void> showReportSheet(BuildContext context, int petId) async {
                 Text('Report this pet',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                ..._reasons.map(
-                  (reason) => RadioListTile<String>(
-                    title: Text(reason),
-                    value: reason,
-                    groupValue: selectedReason,
-                    onChanged: (v) => setState(() => selectedReason = v),
+                RadioGroup<String>(
+                  groupValue: selectedReason,
+                  onChanged: (v) => setState(() => selectedReason = v),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final reason in _reasons)
+                        RadioListTile<String>(
+                          title: Text(reason),
+                          value: reason,
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),

@@ -31,13 +31,13 @@ class PetRepository {
         'type': type.name,
         'gender': gender.name,
         'name': name,
-        if (bio != null) 'bio': bio,
+        'bio': ?bio,
         if (birthdate != null)
           'birthdate': birthdate.toIso8601String().substring(0, 10),
-        if (lat != null) 'location_lat': lat,
-        if (lng != null) 'location_lng': lng,
-        if (locationName != null) 'location_name': locationName,
-        if (primaryPhotoUrl != null) 'primary_photo_url': primaryPhotoUrl,
+        'location_lat': ?lat,
+        'location_lng': ?lng,
+        'location_name': ?locationName,
+        'primary_photo_url': ?primaryPhotoUrl,
       });
     } catch (e) {
       throw Failure.fromDio(e);
@@ -61,6 +61,21 @@ class PetRepository {
   }
 
   Future<void> addPhoto(int petId, String url) => _remote.addPhoto(petId, url);
+
+  Future<Pet> uploadPrimaryPhoto({
+    required int petId,
+    required String filePath,
+  }) async {
+    try {
+      final url = await _remote.uploadPhotoFile(petId, filePath);
+      if (url == null) {
+        throw const Failure('Photo upload returned no URL');
+      }
+      return await _remote.update(petId, {'primary_photo_url': url});
+    } catch (e) {
+      throw Failure.fromDio(e);
+    }
+  }
 
   Future<void> addVaccination(
     int petId, {

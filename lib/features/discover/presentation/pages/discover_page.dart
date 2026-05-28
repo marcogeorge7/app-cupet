@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../shared/models/pet.dart';
 import '../../../../shared/widgets/empty_state.dart';
+import '../../../../shared/widgets/cupet_logo.dart';
 import '../../../profile/presentation/bloc/pet_bloc.dart';
 import '../../../reports/presentation/report_sheet.dart';
 import '../bloc/discover_bloc.dart';
@@ -21,6 +22,18 @@ class _DiscoverPageState extends State<DiscoverPage> {
   Pet? _activePet;
 
   @override
+  void initState() {
+    super.initState();
+    // The deck is derived from the app-level PetBloc, which is otherwise only
+    // loaded when the Profile tab is opened. After login the router lands here
+    // directly, so kick off the pet load if nothing has loaded it yet.
+    final petBloc = context.read<PetBloc>();
+    if (petBloc.state.status == PetStatus.initial) {
+      petBloc.add(const PetsLoaded());
+    }
+  }
+
+  @override
   void dispose() {
     _swiper.dispose();
     super.dispose();
@@ -34,8 +47,16 @@ class _DiscoverPageState extends State<DiscoverPage> {
     if (next.id != _activePet?.id) {
       _activePet = next;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         context.read<DiscoverBloc>().add(DeckLoaded(next.id));
       });
+    }
+  }
+
+  Future<void> _refresh() async {
+    context.read<PetBloc>().add(const PetsLoaded());
+    if (_activePet != null) {
+      context.read<DiscoverBloc>().add(DeckLoaded(_activePet!.id));
     }
   }
 
@@ -43,17 +64,27 @@ class _DiscoverPageState extends State<DiscoverPage> {
   Widget build(BuildContext context) {
     return BlocBuilder<PetBloc, PetState>(
       builder: (context, petState) {
-        if (petState.status == PetStatus.loading && petState.pets.isEmpty) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
         if (petState.pets.isEmpty) {
+          final stillLoading = petState.status == PetStatus.initial ||
+              petState.status == PetStatus.loading;
+          if (stillLoading) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          // Ready/error with no pets → the user genuinely has no pet profile.
           return Scaffold(
             appBar: AppBar(title: const Text('Discover')),
-            body: const EmptyState(
-              title: 'Add a pet to start swiping',
-              subtitle: 'You need a pet profile before we can find a match.',
+            body: RefreshIndicator(
+              onRefresh: () async =>
+                  context.read<PetBloc>().add(const PetsLoaded()),
+              child: const _ScrollableCenter(
+                child: EmptyState(
+                  title: 'Add a pet to start swiping',
+                  subtitle:
+                      'You need a pet profile before we can find a match.',
+                ),
+              ),
             ),
           );
         }
@@ -63,6 +94,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
           listener: (context, state) {
             final m = state.match!;
             final other = m.otherPetFor(_activePet?.userId ?? -1);
+            final discoverBloc = context.read<DiscoverBloc>();
             showDialog(
               context: context,
               builder: (_) => AlertDialog(
@@ -77,15 +109,38 @@ class _DiscoverPageState extends State<DiscoverPage> {
               ),
             ).then((_) {
               if (mounted) {
-                context.read<DiscoverBloc>().add(const MatchAcknowledged());
+                discoverBloc.add(const MatchAcknowledged());
               }
             });
           },
           builder: (context, state) {
             return Scaffold(
               appBar: AppBar(
-                title: Text('Discover · ${_activePet?.name ?? ''}'),
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CupetWordmarkLogo(height: 26),
+                    if (_activePet != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '· ${_activePet!.name}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ],
+                ),
                 actions: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Refresh',
+                    onPressed: () {
+                      if (_activePet != null) {
+                        context
+                            .read<DiscoverBloc>()
+                            .add(DeckLoaded(_activePet!.id));
+                      }
+                    },
+                  ),
                   if (petState.pets.length > 1)
                     PopupMenuButton<int>(
                       icon: const Icon(Icons.swap_horiz),
@@ -110,63 +165,126 @@ class _DiscoverPageState extends State<DiscoverPage> {
               ),
               body: state.status == DiscoverStatus.loading
                   ? const Center(child: CircularProgressIndicator())
-                  : state.deck.isEmpty
-                      ? const EmptyState(
-                          title: 'No more pets nearby',
-                          subtitle: 'Check back soon for new fluffballs.',
-                        )
-                      : Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: AppinioSwiper(
-                                  controller: _swiper,
-                                  cardCount: state.deck.length,
-                                  cardBuilder: (_, i) =>
-                                      PetCard(pet: state.deck[i]),
-                                  onSwipeEnd: (prev, target, activity) {
-                                    final pet = state.deck.length > prev
-                                        ? state.deck[prev]
-                                        : null;
-                                    if (pet == null || _activePet == null) return;
-                                    final liked = target > prev; // right
-                                    context.read<DiscoverBloc>().add(
-                                          CardSwiped(
-                                            fromPetId: _activePet!.id,
-                                            toPetId: pet.id,
-                                            liked: liked,
-                                          ),
-                                        );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
+                  : state.status == DiscoverStatus.error
+                      ? RefreshIndicator(
+                          onRefresh: _refresh,
+                          child: _ScrollableCenter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _ActionButton(
-                                    icon: Icons.close,
-                                    background: Colors.white,
-                                    onPressed: () =>
-                                        _swiper.swipeLeft(),
+                                  const Icon(Icons.cloud_off, size: 48),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    state.errorMessage ??
+                                        'Could not load nearby pets.',
+                                    textAlign: TextAlign.center,
                                   ),
-                                  _ActionButton(
-                                    icon: Icons.favorite,
-                                    background: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
-                                    onPressed: () =>
-                                        _swiper.swipeRight(),
+                                  const SizedBox(height: 16),
+                                  FilledButton.icon(
+                                    onPressed: () {
+                                      if (_activePet != null) {
+                                        context.read<DiscoverBloc>().add(
+                                              DeckLoaded(_activePet!.id),
+                                            );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Try again'),
                                   ),
                                 ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
+                        )
+                      : state.deck.isEmpty
+                          ? RefreshIndicator(
+                              onRefresh: _refresh,
+                              child: const _ScrollableCenter(
+                                child: EmptyState(
+                                  title: 'No more pets nearby',
+                                  subtitle:
+                                      'Check back soon for new fluffballs.',
+                                ),
+                              ),
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  Expanded(
+                                    child: AppinioSwiper(
+                                      controller: _swiper,
+                                      cardCount: state.deck.length,
+                                      cardBuilder: (_, i) =>
+                                          PetCard(pet: state.deck[i]),
+                                      onSwipeEnd: (prev, target, activity) {
+                                        final pet = state.deck.length > prev
+                                            ? state.deck[prev]
+                                            : null;
+                                        if (pet == null ||
+                                            _activePet == null) {
+                                          return;
+                                        }
+                                        final liked = target > prev; // right
+                                        context.read<DiscoverBloc>().add(
+                                              CardSwiped(
+                                                fromPetId: _activePet!.id,
+                                                toPetId: pet.id,
+                                                liked: liked,
+                                              ),
+                                            );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      _ActionButton(
+                                        icon: Icons.close,
+                                        background: Colors.white,
+                                        onPressed: () => _swiper.swipeLeft(),
+                                      ),
+                                      _ActionButton(
+                                        icon: Icons.favorite,
+                                        background: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        onPressed: () => _swiper.swipeRight(),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
             );
           },
+        );
+      },
+    );
+  }
+}
+
+/// Wraps non-scrolling content so it can host a [RefreshIndicator] pull
+/// gesture while staying vertically centred.
+class _ScrollableCenter extends StatelessWidget {
+  const _ScrollableCenter({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: child),
+          ),
         );
       },
     );

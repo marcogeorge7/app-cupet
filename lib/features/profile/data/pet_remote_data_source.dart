@@ -32,8 +32,23 @@ class PetRemoteDataSource {
   Future<void> addPhoto(int petId, String url, {int? order}) async {
     await _dio.post('/pets/$petId/photos', data: {
       'url': url,
-      if (order != null) 'order': order,
+      'order': ?order,
     });
+  }
+
+  Future<String?> uploadPhotoFile(int petId, String filePath) async {
+    final form = FormData.fromMap({
+      'photo': await MultipartFile.fromFile(filePath),
+    });
+    final response = await _dio.post(
+      '/pets/$petId/photos',
+      data: form,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    final data = response.data as Map<String, dynamic>;
+    final inner =
+        (data['data'] as Map<String, dynamic>?) ?? data;
+    return inner['url'] as String?;
   }
 
   Future<void> addVaccination(
@@ -45,7 +60,7 @@ class PetRemoteDataSource {
     await _dio.post('/pets/$petId/vaccinations', data: {
       'name': name,
       if (givenAt != null) 'given_at': givenAt.toIso8601String().substring(0, 10),
-      if (certificateUrl != null) 'certificate_url': certificateUrl,
+      'certificate_url': ?certificateUrl,
     });
   }
 }
