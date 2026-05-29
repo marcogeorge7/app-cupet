@@ -67,7 +67,11 @@ class SocketHubClient {
     _socket = io.io(
       '$base/$namespace',
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          // Polling-first, then upgrade to websocket. socket-hub sits behind
+          // Hostinger's CDN (HTTP/2), where the raw WS upgrade is unreliable;
+          // websocket-only left the app stuck on "Connecting…". Polling always
+          // works there and silently upgrades to WS when the proxy allows.
+          .setTransports(['polling', 'websocket'])
           .disableAutoConnect()
           .enableReconnection()
           .setAuth({'token': token})

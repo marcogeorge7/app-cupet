@@ -65,13 +65,27 @@ class FcmService {
         }
       }
 
+      await syncToken();
+      _messaging.onTokenRefresh.listen(_auth.registerFcmToken);
+    } catch (e) {
+      debugPrint('FCM init failed: $e');
+    }
+  }
+
+  /// Fetch the current FCM token and register it with the backend. Safe to
+  /// call repeatedly — registration is an idempotent upsert keyed on the
+  /// token. init() runs this once at startup, but on a fresh install that
+  /// races ahead of OTP login and the `POST /devices` 401s, so app.dart also
+  /// calls this when auth resolves so a newly-signed-in device is reachable
+  /// without an app restart.
+  Future<void> syncToken() async {
+    try {
       final token = await _messaging.getToken();
       if (token != null) {
         await _auth.registerFcmToken(token);
       }
-      _messaging.onTokenRefresh.listen(_auth.registerFcmToken);
     } catch (e) {
-      debugPrint('FCM init failed: $e');
+      debugPrint('FCM syncToken failed: $e');
     }
   }
 

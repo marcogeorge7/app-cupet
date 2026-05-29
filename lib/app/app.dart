@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/di/injector.dart';
+import '../core/messaging/fcm_service.dart';
 import '../core/navigation/navigation_service.dart';
 import '../core/realtime/realtime_user_service.dart';
 import '../features/auth/domain/auth_repository.dart';
@@ -54,6 +55,11 @@ class _CupetAppState extends State<CupetApp> {
     if (state.status == AuthStatus.authenticated && state.user != null) {
       // Idempotent — safe to call on every authenticated emission.
       realtime.start(state.user!.id);
+      // Register this device's FCM token now that we're authenticated. The
+      // startup FcmService.init() call races ahead of OTP login and 401s on a
+      // fresh install, so without this a newly-signed-in device gets no push
+      // until the next app restart.
+      getIt<FcmService>().syncToken();
       final nav = getIt<NavigationService>();
       final pending = nav.pendingDeepLink;
       if (pending != null && !_needsOnboarding(state)) {
