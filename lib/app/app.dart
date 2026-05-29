@@ -20,13 +20,14 @@ class CupetApp extends StatefulWidget {
   State<CupetApp> createState() => _CupetAppState();
 }
 
-class _CupetAppState extends State<CupetApp> {
+class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
   late final AuthBloc _authBloc;
   late final GoRouter _router;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _authBloc = AuthBloc(getIt<AuthRepository>())
       ..add(const AuthCheckRequested());
     _router = buildRouter(_authBloc);
@@ -36,10 +37,22 @@ class _CupetAppState extends State<CupetApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     getIt<RealtimeUserService>().stop();
     _router.dispose();
     _authBloc.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The socket-hub connection dies while the app is backgrounded (OS tears it
+    // down; the short-lived JWT also expires after a while). Re-establish it on
+    // resume so chat/realtime works without a full app restart.
+    if (state == AppLifecycleState.resumed &&
+        _authBloc.state.status == AuthStatus.authenticated) {
+      getIt<RealtimeUserService>().onAppResumed();
+    }
   }
 
   /// Mirrors the router's onboarding gate: a user without a name or any pet

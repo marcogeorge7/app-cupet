@@ -42,7 +42,7 @@ class SocketHubClient {
     if (_socket != null || _connecting) return;
     _connecting = true;
     try {
-      final res = await _dio.get<Map<String, dynamic>>('socket/token');
+      final res = await _dio.get<Map<String, dynamic>>('/socket/token');
       final data = res.data;
       if (data == null) return;
       _connect(
@@ -67,11 +67,13 @@ class SocketHubClient {
     _socket = io.io(
       '$base/$namespace',
       io.OptionBuilder()
-          // Polling-first, then upgrade to websocket. socket-hub sits behind
-          // Hostinger's CDN (HTTP/2), where the raw WS upgrade is unreliable;
-          // websocket-only left the app stuck on "Connecting…". Polling always
-          // works there and silently upgrades to WS when the proxy allows.
-          .setTransports(['polling', 'websocket'])
+          // websocket-only. Verified against socket-hub: this Dart client's
+          // polling (XHR) transport hangs/times out there, while websocket
+          // connects in ~1s — WebSocket passes the Hostinger CDN fine for the
+          // real client. A polling-first list left the socket stuck on iOS
+          // (polling hung before it could upgrade). The earlier "stuck
+          // Connecting…" was actually the /socket/token URL bug, not transport.
+          .setTransports(['websocket'])
           .disableAutoConnect()
           .enableReconnection()
           .setAuth({'token': token})
@@ -157,13 +159,25 @@ class SocketHubClient {
     });
   }
 
+  /// Ensure a live connection, re-minting the token if needed. Called when the
+  /// app returns to the foreground: the OS may have torn the socket down and
+  /// the JWT may have expired, so a stale `_socket` must be re-authed and
+  /// reconnected. Already-connected sockets are left alone.
+  Future<void> reconnect() async {
+    if (_socket == null) {
+      await ensureStarted(); // never started (or disposed) — start fresh
+    } else if (!isConnected) {
+      await refreshToken(); // re-mint token + disconnect/connect
+    }
+  }
+
   /// Re-mint the connection token (picks up newly-authorized channels) and
   /// reconnect. Listeners and subscriptions persist across the reconnect.
   Future<void> refreshToken() async {
     final socket = _socket;
     if (socket == null) return;
     try {
-      final res = await _dio.get<Map<String, dynamic>>('socket/token');
+      final res = await _dio.get<Map<String, dynamic>>('/socket/token');
       final token = res.data?['token'] as String?;
       if (token == null) return;
       socket.auth = {'token': token};

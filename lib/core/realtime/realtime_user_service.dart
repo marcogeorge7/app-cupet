@@ -62,6 +62,13 @@ class RealtimeUserService {
     }
   }
 
+  /// Re-establish realtime after the app returns to the foreground. No-op when
+  /// logged out; otherwise reconnects only if the socket was dropped.
+  Future<void> onAppResumed() async {
+    if (_userId == null) return;
+    await _socket.reconnect();
+  }
+
   /// Called by the FCM foreground handler so a visible Matches list re-orders
   /// when a new message arrives.
   void notifyMessageReceived(int conversationId) {
