@@ -69,6 +69,13 @@ class _MatchesPageState extends State<MatchesPage> {
               itemBuilder: (context, index) {
                 final match = state.matches[index];
                 final other = match.otherPetFor(userId);
+                final preview = match.lastMessage;
+                final hasUnread = match.unreadCount > 0;
+                final subtitleText = preview != null
+                    ? (preview.senderUserId == userId
+                        ? 'You: ${preview.body}'
+                        : preview.body)
+                    : '${other.type.name.toUpperCase()} · ${other.gender.name}';
                 return ListTile(
                   leading: other.primaryPhotoUrl != null
                       ? CircleAvatar(
@@ -77,17 +84,51 @@ class _MatchesPageState extends State<MatchesPage> {
                               other.primaryPhotoUrl!),
                         )
                       : const Germeen(size: 56, mood: GermeenMood.sassy),
-                  title: Text(other.name),
+                  title: Text(
+                    other.name,
+                    style: hasUnread
+                        ? const TextStyle(fontWeight: FontWeight.bold)
+                        : null,
+                  ),
                   subtitle: Text(
-                      '${other.type.name.toUpperCase()} · ${other.gender.name}'),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'report') {
-                        showReportSheet(context, other.id);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'report', child: Text('Report')),
+                    subtitleText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: hasUnread
+                        ? const TextStyle(fontWeight: FontWeight.w600)
+                        : null,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasUnread)
+                        Container(
+                          margin: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${match.unreadCount}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'report') {
+                            showReportSheet(context, other.id);
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'report', child: Text('Report')),
+                        ],
+                      ),
                     ],
                   ),
                   onTap: () {

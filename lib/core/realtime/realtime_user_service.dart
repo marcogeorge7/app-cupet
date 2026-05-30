@@ -14,11 +14,19 @@ class MatchCreatedEvent extends RealtimeUserEvent {
   const MatchCreatedEvent();
 }
 
-/// A new message arrived for this user. Messages broadcast on the conversation
-/// channel (not the user channel), so this is raised from the FCM foreground
-/// handler via [RealtimeUserService.notifyMessageReceived].
+/// A new message arrived for this user. Raised either from the backend's
+/// `message.received` event on the user channel (live, even when not inside the
+/// chat) or from the FCM foreground handler via
+/// [RealtimeUserService.notifyMessageReceived] as a backup.
 class MessageReceivedEvent extends RealtimeUserEvent {
   const MessageReceivedEvent(this.conversationId);
+  final int conversationId;
+}
+
+/// This user read a conversation (backend `conversation.read`), so the inbox
+/// unread badge should clear — fires across all of the user's devices.
+class ConversationReadEvent extends RealtimeUserEvent {
+  const ConversationReadEvent(this.conversationId);
   final int conversationId;
 }
 
@@ -33,6 +41,8 @@ class RealtimeUserService {
       StreamController<RealtimeUserEvent>.broadcast();
 
   StreamSubscription<Map<String, dynamic>>? _subscription;
+  StreamSubscription<Map<String, dynamic>>? _messageSubscription;
+  StreamSubscription<Map<String, dynamic>>? _readSubscription;
   String? _channelName;
   int? _userId;
 
@@ -57,6 +67,23 @@ class RealtimeUserService {
         unawaited(_socket.refreshToken());
         _controller.add(const MatchCreatedEvent());
       });
+      // `message.received` also reaches only this user's channel, fired by the
+      // backend for every inbound message so the inbox stays live even when the
+      // user isn't inside that conversation (whose channel they aren't on).
+      _messageSubscription = _socket.on('message.received').listen((data) {
+        final conversationId = data['conversation_id'];
+        if (conversationId is int) {
+          _controller.add(MessageReceivedEvent(conversationId));
+        }
+      });
+      // Fired when this user reads a conversation (on any of their devices) so
+      // the inbox unread badge clears live without reopening the list.
+      _readSubscription = _socket.on('conversation.read').listen((data) {
+        final conversationId = data['conversation_id'];
+        if (conversationId is int) {
+          _controller.add(ConversationReadEvent(conversationId));
+        }
+      });
     } catch (e) {
       debugPrint('RealtimeUserService start failed: $e');
     }
@@ -78,6 +105,10 @@ class RealtimeUserService {
   Future<void> stop() async {
     await _subscription?.cancel();
     _subscription = null;
+    await _messageSubscription?.cancel();
+    _messageSubscription = null;
+    await _readSubscription?.cancel();
+    _readSubscription = null;
     if (_channelName != null) {
       await _socket.unsubscribe(_channelName!);
       _channelName = null;
