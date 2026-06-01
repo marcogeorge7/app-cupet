@@ -1,7 +1,6 @@
 source "https://rubygems.org"
 
 # CI toolchain for the iOS release workflow (.github/workflows/ios-release.yml):
-# fastlane drives archive + TestFlight upload + App Store submission, and
-# cocoapods is pinned so `pod install` matches local.
+# fastlane drives archive + TestFlight upload. `pod install` is handled by
+# `flutter build ios` using the runner's system CocoaPods, so it isn't pinned here.
 gem "fastlane"
-gem "cocoapods"

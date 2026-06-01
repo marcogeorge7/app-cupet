@@ -40,6 +40,10 @@ platform :ios do
       output_directory: "build",
       output_name: "cupet.ipa",
       export_method: "app-store",
+      # Keep the CI log direct: hide the verbose xcodebuild output on success.
+      # The "Print full build log on failure" workflow step still dumps the
+      # complete gym log if anything breaks.
+      suppress_xcode_output: true,
       # ARCHIVE with AUTOMATIC signing. A global manual profile (xcargs) gets
       # applied to every target, but the Swift Package / Pod dependencies
       # (Firebase, GoogleUtilities, AblyDeltaCodec, …) can't take a provisioning
