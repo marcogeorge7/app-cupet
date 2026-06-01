@@ -215,7 +215,7 @@ class FcmService {
   void _route(Map<String, dynamic> data) {
     final route = routeForData(data);
     if (route != null) {
-      _navigation.push(route);
+      _navigation.deepLink(route);
     }
   }
 }

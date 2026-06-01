@@ -42,7 +42,12 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
       ..add(const AuthCheckRequested());
     _router = buildRouter(_authBloc);
     // Let code outside the widget tree (FCM callbacks) navigate.
-    getIt<NavigationService>().attach(_router);
+    final nav = getIt<NavigationService>();
+    nav.attach(_router);
+    // Replay a notification deep link the moment it's stashed, so a tap that
+    // resolves after auth is already settled isn't missed (the auth-change
+    // listener below covers the opposite order).
+    nav.onPendingDeepLink = _replayDeepLink;
     // A revoked bearer (Dio 401) or a kicked socket (`session.revoked`) both
     // funnel through SessionEventBus; turn either into a forced sign-out.
     _forcedLogoutSub = getIt<SessionEventBus>().onForcedLogout.listen((_) {
@@ -59,6 +64,7 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
     _forcedLogoutSub.cancel();
     _realtimeSub.cancel();
     getIt<RealtimeUserService>().stop();
+    getIt<NavigationService>().onPendingDeepLink = null;
     _router.dispose();
     _authBloc.close();
     super.dispose();
@@ -92,7 +98,7 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
         duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'View',
-          onPressed: () => getIt<NavigationService>().push(
+          onPressed: () => getIt<NavigationService>().deepLink(
             conversationId != null ? '/chat/$conversationId' : '/matches',
           ),
         ),
@@ -121,8 +127,8 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'View',
-          onPressed: () =>
-              getIt<NavigationService>().push('/chat/${event.conversationId}'),
+          onPressed: () => getIt<NavigationService>()
+              .deepLink('/chat/${event.conversationId}'),
         ),
       ));
   }
@@ -156,6 +162,24 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
     return (user.name ?? '').trim().isEmpty || user.petsCount == 0;
   }
 
+  /// Replay a stashed notification deep link once the user is authenticated and
+  /// past onboarding. No-op when nothing is pending or we're not ready yet.
+  /// Driven by BOTH the auth-change listener and NavigationService's
+  /// onPendingDeepLink, so it fires regardless of which happens last.
+  void _replayDeepLink() {
+    final state = _authBloc.state;
+    if (state.status != AuthStatus.authenticated || _needsOnboarding(state)) {
+      return;
+    }
+    final nav = getIt<NavigationService>();
+    final pending = nav.pendingDeepLink;
+    if (pending == null) return;
+    nav.pendingDeepLink = null;
+    // Defer so the authenticated redirect to /discover settles first; the deep
+    // link then lands on top of it (Back returns to the app).
+    WidgetsBinding.instance.addPostFrameCallback((_) => nav.deepLink(pending));
+  }
+
   void _onAuthChanged(BuildContext context, AuthState state) {
     final realtime = getIt<RealtimeUserService>();
     if (state.status == AuthStatus.authenticated && state.user != null) {
@@ -166,16 +190,7 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
       // fresh install, so without this a newly-signed-in device gets no push
       // until the next app restart.
       getIt<FcmService>().syncToken();
-      final nav = getIt<NavigationService>();
-      final pending = nav.pendingDeepLink;
-      if (pending != null && !_needsOnboarding(state)) {
-        nav.pendingDeepLink = null;
-        // Defer so the authenticated redirect to /discover settles first;
-        // the deep link then sits on top of it (back returns to the app).
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          nav.push(pending);
-        });
-      }
+      _replayDeepLink();
     } else if (state.status == AuthStatus.unauthenticated) {
       realtime.stop();
     }
