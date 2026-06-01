@@ -2,11 +2,12 @@ default_platform(:ios)
 
 # Runs in CI after `flutter build ios --release --no-codesign` has compiled the
 # Dart/engine side (version + build number are baked into Generated.xcconfig by
-# that step). This lane signs + archives, ships to TestFlight, then submits the
-# same build for App Store review. See fastlane/SETUP.md for required secrets.
+# that step). This lane signs + archives and ships the build to TestFlight; the
+# App Store submission is then done manually in App Store Connect. See
+# fastlane/SETUP.md for required secrets.
 platform :ios do
-  desc "Archive, upload to TestFlight, and submit for App Store review"
-  lane :release do
+  desc "Archive and upload to TestFlight (submit for review manually in App Store Connect)"
+  lane :beta do
     api_key = app_store_connect_api_key(
       key_id: ENV.fetch("ASC_KEY_ID"),
       issuer_id: ENV.fetch("ASC_ISSUER_ID"),
@@ -40,27 +41,13 @@ platform :ios do
       },
     )
 
-    # Upload the binary and wait for App Store Connect to finish processing so it
-    # can be submitted for review immediately afterwards. The same build is what
-    # appears in TestFlight.
+    # Upload the build to TestFlight. The App Store submission is done manually
+    # in App Store Connect, so there's no need to wait for processing here.
     upload_to_testflight(
       api_key: api_key,
       ipa: "build/cupet.ipa",
       distribute_external: false,
-      skip_waiting_for_build_processing: false,
-    )
-
-    # Submit the just-uploaded build for App Store review (no second upload).
-    upload_to_app_store(
-      api_key: api_key,
-      skip_binary_upload: true,
-      submit_for_review: true,
-      automatic_release_after_approval: false,
-      force: true,                 # don't open the HTML preview / wait for input
-      skip_screenshots: true,
-      skip_metadata: true,         # manage store text/screenshots on ASC, not CI
-      precheck_include_in_app_purchases: false,
-      submission_information: { add_id_info_uses_idfa: false },
+      skip_waiting_for_build_processing: true,
     )
   end
 end

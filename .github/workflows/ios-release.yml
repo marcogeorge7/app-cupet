@@ -1,16 +1,13 @@
 name: iOS Release
 
-# Trigger by pushing a version tag, e.g.:
-#   git tag v1.0.2 && git push origin v1.0.2
-# The tag (minus the leading "v") becomes the marketing version, and the git
-# commit count becomes the build number. `workflow_dispatch` lets you also run
-# it by hand from the Actions tab (optionally typing a version).
-#
-# To run on every push to main instead, replace the `tags:` block with
-#   branches: [main]
-# and supply the version another way (the resolve step falls back to pubspec).
+# Builds and uploads to TestFlight on every push to `main` (build number = git
+# commit count, version = pubspec). App Store submission is done MANUALLY in App
+# Store Connect afterwards. You can also push a `v1.0.2` tag to stamp an explicit
+# version, or run it by hand from the Actions tab (workflow_dispatch).
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -79,11 +76,11 @@ jobs:
           bundle install
           bundle exec pod install
 
-      - name: Archive, upload to TestFlight, submit for review
+      - name: Archive + upload to TestFlight
         working-directory: ios
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           PROFILE_NAME: ${{ secrets.IOS_PROFILE_NAME }}
-        run: bundle exec fastlane release
+        run: bundle exec fastlane beta
