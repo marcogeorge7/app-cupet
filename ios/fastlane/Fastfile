@@ -1,0 +1,66 @@
+default_platform(:ios)
+
+# Runs in CI after `flutter build ios --release --no-codesign` has compiled the
+# Dart/engine side (version + build number are baked into Generated.xcconfig by
+# that step). This lane signs + archives, ships to TestFlight, then submits the
+# same build for App Store review. See fastlane/SETUP.md for required secrets.
+platform :ios do
+  desc "Archive, upload to TestFlight, and submit for App Store review"
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_P8"),
+      is_key_content_base64: true,
+    )
+
+    profile = ENV.fetch("PROFILE_NAME")
+
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      output_directory: "build",
+      output_name: "cupet.ipa",
+      # Force manual signing for the archive so CI is reproducible (the project
+      # otherwise uses automatic signing, which needs interactive provisioning).
+      xcargs: "CODE_SIGN_STYLE=Manual " \
+              "DEVELOPMENT_TEAM=MR6847N3F7 " \
+              "PROVISIONING_PROFILE_SPECIFIER='#{profile}' " \
+              "CODE_SIGN_IDENTITY='Apple Distribution'",
+      export_method: "app-store",
+      export_options: {
+        method: "app-store",
+        signingStyle: "manual",
+        teamID: "MR6847N3F7",
+        provisioningProfiles: { "app.cupet.cupetApp" => profile },
+        # No Crashlytics in this app, so skip dSYM upload — this is what silences
+        # the "Upload Symbols Failed" warnings for Runner.app / objective_c.
+        uploadSymbols: false,
+      },
+    )
+
+    # Upload the binary and wait for App Store Connect to finish processing so it
+    # can be submitted for review immediately afterwards. The same build is what
+    # appears in TestFlight.
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: "build/cupet.ipa",
+      distribute_external: false,
+      skip_waiting_for_build_processing: false,
+    )
+
+    # Submit the just-uploaded build for App Store review (no second upload).
+    upload_to_app_store(
+      api_key: api_key,
+      skip_binary_upload: true,
+      submit_for_review: true,
+      automatic_release_after_approval: false,
+      force: true,                 # don't open the HTML preview / wait for input
+      skip_screenshots: true,
+      skip_metadata: true,         # manage store text/screenshots on ASC, not CI
+      precheck_include_in_app_purchases: false,
+      submission_information: { add_id_info_uses_idfa: false },
+    )
+  end
+end

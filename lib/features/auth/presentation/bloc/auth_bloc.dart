@@ -33,6 +33,15 @@ class AuthLoggedOut extends AuthEvent {
   const AuthLoggedOut();
 }
 
+/// The session was ended by the server, not the user: the Sanctum token was
+/// revoked or the socket was kicked because this account signed in on another
+/// device (one device per account). Unlike [AuthLoggedOut] this must NOT hit
+/// the backend logout endpoint — the token is already invalid — and it lands
+/// the user on /auth with an explanatory message.
+class AuthSessionRevoked extends AuthEvent {
+  const AuthSessionRevoked();
+}
+
 /// Permanently delete the current account (App Store Guideline 5.1.1(v)).
 /// On success the user ends up unauthenticated; on failure we stay
 /// authenticated and surface [AuthState.errorMessage].
@@ -141,6 +150,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthOtpRequested>(_onOtpRequested);
     on<AuthOtpSubmitted>(_onOtpSubmitted);
     on<AuthLoggedOut>(_onLogout);
+    on<AuthSessionRevoked>(_onSessionRevoked);
     on<AuthAccountDeleted>(_onAccountDeleted);
     on<AuthOtpCancelled>((event, emit) =>
         emit(const AuthState(status: AuthStatus.unauthenticated)));
@@ -269,6 +279,31 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         errorMessage: e is Failure ? e.message : e.toString(),
       ));
     }
+  }
+
+  Future<void> _onSessionRevoked(
+    AuthSessionRevoked event,
+    Emitter<AuthState> emit,
+  ) async {
+    // Idempotent: rapid duplicate signals (several 401s in flight, plus the
+    // socket `session.revoked`) must not re-clear or thrash the router once
+    // we're already signed out. `unknown` is the initial-check window — a
+    // best-effort pre-login call (e.g. POST /devices at startup) 401ing there
+    // must not tear down a session that's still resolving.
+    if (state.status == AuthStatus.unauthenticated ||
+        state.status == AuthStatus.unknown) {
+      return;
+    }
+    try {
+      await _repository.clearLocalSession();
+    } catch (_) {
+      // Local-only teardown; never strand the user on an authenticated screen.
+    }
+    emit(const AuthState(
+      status: AuthStatus.unauthenticated,
+      errorMessage:
+          'You were signed out because your account was used on another device.',
+    ));
   }
 
   Future<void> _onLogout(AuthLoggedOut event, Emitter<AuthState> emit) async {

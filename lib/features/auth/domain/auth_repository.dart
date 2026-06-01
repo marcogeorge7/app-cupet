@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/foundation.dart';
 
 import '../../../core/error/failures.dart';
 import '../../../core/storage/secure_token_storage.dart';
@@ -121,6 +122,19 @@ class AuthRepository {
     }
   }
 
+  /// Returns true if the stored bearer is still valid on the backend. Used to
+  /// tell a real "signed in elsewhere" kick (bearer revoked → false) from a
+  /// spurious socket self-kick (bearer still valid → true). A network error
+  /// means we can't tell, so we assume still-valid to avoid logging out a user
+  /// who is merely offline.
+  Future<bool> verifySession() async {
+    try {
+      return await _remote.verifySession();
+    } catch (_) {
+      return true;
+    }
+  }
+
   Future<AppUser> updateProfile({
     String? name,
     String? email,
@@ -144,13 +158,22 @@ class AuthRepository {
 
   Future<void> registerFcmToken(String fcmToken) async {
     if (fcmToken.isEmpty) return;
+    // No session yet (startup before login, or an onTokenRefresh while logged
+    // out) — there's nothing to attach the device to, and POSTing would just
+    // 401. app.dart calls syncToken() again right after login, when this runs
+    // for real.
+    if (!await hasToken()) {
+      return;
+    }
     try {
       await _remote.registerDevice(
         fcmToken: fcmToken,
         platform: _platform(),
       );
-    } catch (_) {
-      // Best-effort: do not block sign-in.
+    } catch (e) {
+      // Best-effort: never block sign-in — but surface WHY it failed, since a
+      // silent failure here is exactly why `device_tokens` can stay empty.
+      debugPrint('FCM: registerDevice failed (POST /devices): $e');
     }
   }
 
@@ -162,6 +185,21 @@ class AuthRepository {
     try {
       await _remote.logout();
     } catch (_) {}
+    try {
+      await _firebaseAuth.signOut();
+    } catch (_) {}
+    try {
+      await _storage.clear();
+    } catch (_) {}
+    _cachedUser = null;
+  }
+
+  /// Tear down ONLY the local session — no backend call. Used when the server
+  /// has already invalidated our token (a newer login on another device, one
+  /// device per account), so calling `/logout` would just 401 again. Mirrors
+  /// the local half of [logout]: Firebase sign-out + clear storage + drop the
+  /// cached user, each best-effort so nothing can strand the user mid-logout.
+  Future<void> clearLocalSession() async {
     try {
       await _firebaseAuth.signOut();
     } catch (_) {}

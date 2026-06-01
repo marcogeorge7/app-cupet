@@ -19,7 +19,8 @@ class DiscoverRemoteDataSource {
       'pet_id': petId,
       'radius_km': ?radiusKm,
     });
-    final list = (response.data as Map<String, dynamic>)['data'] as List;
+    // Tolerate an absent/null `data` key (empty feed) instead of throwing.
+    final list = (response.data as Map<String, dynamic>)['data'] as List? ?? [];
     return list.map((e) => Pet.fromJson(e as Map<String, dynamic>)).toList();
   }
 

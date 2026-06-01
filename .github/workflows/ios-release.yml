@@ -1,0 +1,89 @@
+name: iOS Release
+
+# Trigger by pushing a version tag, e.g.:
+#   git tag v1.0.2 && git push origin v1.0.2
+# The tag (minus the leading "v") becomes the marketing version, and the git
+# commit count becomes the build number. `workflow_dispatch` lets you also run
+# it by hand from the Actions tab (optionally typing a version).
+#
+# To run on every push to main instead, replace the `tags:` block with
+#   branches: [main]
+# and supply the version another way (the resolve step falls back to pubspec).
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Marketing version (e.g. 1.0.2). Blank = use pubspec.'
+        required: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so `git rev-list --count` is correct
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve version + build number
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="$(grep '^version:' pubspec.yaml | sed -E 's/version:[[:space:]]*//; s/\+.*//')"
+          fi
+          BUILD="$(git rev-list --count HEAD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION ($BUILD)"
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Build Flutter (unsigned — fastlane signs + archives next)
+        run: >
+          flutter build ios --release --no-codesign
+          --build-name=${{ steps.ver.outputs.version }}
+          --build-number=${{ steps.ver.outputs.build }}
+
+      - name: Import distribution certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_DIST_CERT_P12 }}
+          p12-password: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+
+      - name: Install provisioning profile
+        run: |
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode \
+            > "$HOME/Library/MobileDevice/Provisioning Profiles/cupet_appstore.mobileprovision"
+
+      - name: CocoaPods
+        working-directory: ios
+        run: |
+          bundle install
+          bundle exec pod install
+
+      - name: Archive, upload to TestFlight, submit for review
+        working-directory: ios
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          PROFILE_NAME: ${{ secrets.IOS_PROFILE_NAME }}
+        run: bundle exec fastlane release

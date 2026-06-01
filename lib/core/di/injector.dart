@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import '../../features/auth/data/auth_remote_data_source.dart';
 import '../../features/auth/data/country_remote_data_source.dart';
 import '../../features/auth/domain/auth_repository.dart';
+import '../auth/session_event_bus.dart';
 import '../messaging/active_chat_tracker.dart';
 import '../messaging/fcm_service.dart';
 import '../navigation/navigation_service.dart';
@@ -22,12 +23,13 @@ final getIt = GetIt.instance;
 
 void configureInjector() {
   getIt.registerLazySingleton<SecureTokenStorage>(SecureTokenStorage.new);
-  getIt.registerLazySingleton<Dio>(() => buildDioClient(getIt()));
+  getIt.registerLazySingleton<SessionEventBus>(SessionEventBus.new);
+  getIt.registerLazySingleton<Dio>(() => buildDioClient(getIt(), getIt()));
   getIt.registerLazySingleton<SocketHubClient>(
     () => SocketHubClient(getIt()),
   );
   getIt.registerLazySingleton<RealtimeUserService>(
-    () => RealtimeUserService(getIt()),
+    () => RealtimeUserService(getIt(), getIt(), getIt()),
   );
   getIt.registerLazySingleton<NavigationService>(NavigationService.new);
   getIt.registerLazySingleton<ActiveChatTracker>(ActiveChatTracker.new);

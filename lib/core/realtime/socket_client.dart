@@ -33,7 +33,14 @@ class SocketHubClient {
       StreamController<String>.broadcast();
   String _state = 'DISCONNECTED';
 
+  /// Fires when socket-hub kicks this connection because the account signed in
+  /// on another device (one device per account). The socket is torn down so it
+  /// can't auto-reconnect and re-kick the new device; consumers force a logout.
+  final StreamController<void> _sessionRevoked =
+      StreamController<void>.broadcast();
+
   Stream<String> get connectionStates => _connectionState.stream;
+  Stream<void> get sessionRevoked => _sessionRevoked.stream;
   String get connectionState => _state;
   bool get isConnected => _state == 'CONNECTED';
 
@@ -76,6 +83,12 @@ class SocketHubClient {
           .setTransports(['websocket'])
           .disableAutoConnect()
           .enableReconnection()
+          // Explicit battery-safe backoff: 1s base, 30s cap, 0.5 jitter — a
+          // flaky network can never spin a tight reconnect loop and overheat
+          // the device. (socket_io_client already backs off; this pins it.)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(30000)
+          .setRandomizationFactor(0.5)
           .setAuth({'token': token})
           .build(),
     );
@@ -87,7 +100,15 @@ class SocketHubClient {
       })
       ..onDisconnect((_) => _setState('DISCONNECTED'))
       ..onConnectError((_) => _setState('DISCONNECTED'))
-      ..onError((_) => _setState('DISCONNECTED'));
+      ..onError((_) => _setState('DISCONNECTED'))
+      // Kicked by a newer login elsewhere. Tear the socket down (so auto-
+      // reconnect can't immediately re-kick the new device in a ping-pong),
+      // then surface the event so the app force-logs-out.
+      ..on('session.revoked', (_) {
+        _setState('DISCONNECTED');
+        if (!_sessionRevoked.isClosed) _sessionRevoked.add(null);
+        scheduleMicrotask(_teardownSocket);
+      });
 
     // (Re)attach listeners for any events already requested via [on].
     for (final event in _events.keys) {
@@ -159,6 +180,26 @@ class SocketHubClient {
     });
   }
 
+  /// Close the live connection when the app is backgrounded, WITHOUT disposing
+  /// the singleton: event controllers, listeners, and the desired-subscription
+  /// set all survive, so [reconnect] restores everything on resume. A manual
+  /// disconnect also halts socket.io's auto-reconnect until we explicitly
+  /// reconnect, so nothing churns while the screen isn't visible.
+  void disconnectForBackground() {
+    _socket?.disconnect();
+    _setState('DISCONNECTED');
+  }
+
+  /// Drop the socket entirely after a forced kick. Event controllers and the
+  /// desired-subscription set are kept (a later login replays them on a fresh
+  /// socket); only the live connection and its per-socket listener bookkeeping
+  /// go, so the next `_connect` re-registers cleanly.
+  void _teardownSocket() {
+    _listenerRegistered.clear();
+    _socket?.dispose();
+    _socket = null;
+  }
+
   /// Ensure a live connection, re-minting the token if needed. Called when the
   /// app returns to the foreground: the OS may have torn the socket down and
   /// the JWT may have expired, so a stale `_socket` must be re-authed and
@@ -216,6 +257,7 @@ class SocketHubClient {
     _listenerRegistered.clear();
     _subscribed.clear();
     await _connectionState.close();
+    await _sessionRevoked.close();
     _socket?.dispose();
     _socket = null;
   }

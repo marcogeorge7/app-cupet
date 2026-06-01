@@ -40,7 +40,11 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     getIt<ActiveChatTracker>().leave(widget.conversationId);
-    context.read<ChatBloc>().add(const ChatClosed());
+    // Do NOT read the ChatBloc from context here — the element is deactivated
+    // during dispose ("Looking up a deactivated widget's ancestor is unsafe").
+    // The route's BlocProvider closes the bloc as the page unmounts, and
+    // ChatBloc.close() already runs the same teardown ChatClosed did (cancel
+    // subscriptions + unsubscribe the channel), so no dispatch is needed.
     _scrollController.removeListener(_onScroll);
     _controller.dispose();
     _scrollController.dispose();

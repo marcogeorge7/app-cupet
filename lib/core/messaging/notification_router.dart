@@ -11,6 +11,10 @@ String? routeForData(Map<String, dynamic> data) {
       if (id == null || id.toString().isEmpty) return null;
       return '/chat/$id';
     case 'match':
+      // Prefer landing straight in the new chat (like the in-app banner's
+      // "View"); fall back to the Matches list if no conversation id is present.
+      final cid = data['conversation_id'];
+      if (cid != null && cid.toString().isNotEmpty) return '/chat/$cid';
       return '/matches';
     default:
       return null;

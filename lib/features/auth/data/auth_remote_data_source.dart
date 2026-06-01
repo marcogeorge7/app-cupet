@@ -90,6 +90,17 @@ class AuthRemoteDataSource {
     return AppUser.fromJson(data['data'] as Map<String, dynamic>);
   }
 
+  /// Probe whether the stored bearer is still accepted, WITHOUT tripping the
+  /// 401 interceptor's forced-logout (`skipForcedLogout`) — the caller decides
+  /// what to do with the result. Returns true on a 200.
+  Future<bool> verifySession() async {
+    final response = await _dio.get<dynamic>(
+      '/me',
+      options: Options(extra: const {'skipForcedLogout': true}),
+    );
+    return response.statusCode == 200;
+  }
+
   Future<AppUser> updateMe({
     String? name,
     String? email,

@@ -158,8 +158,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     IconButton(
                       icon: const Icon(Icons.flag_outlined),
                       tooltip: 'Report top card',
-                      onPressed: () =>
-                          showReportSheet(context, state.deck.first.id),
+                      onPressed: () {
+                        // The deck is stable now, so the visible card is the
+                        // swiper's current index — not deck.first.
+                        final i = _swiper.cardIndex ?? 0;
+                        if (i >= 0 && i < state.deck.length) {
+                          showReportSheet(context, state.deck[i].id);
+                        }
+                      },
                     ),
                 ],
               ),
@@ -215,8 +221,25 @@ class _DiscoverPageState extends State<DiscoverPage> {
                                 children: [
                                   Expanded(
                                     child: AppinioSwiper(
+                                      // Key by deck identity: in-deck swipes
+                                      // preserve the swiper (and its index),
+                                      // while a freshly loaded deck recreates it
+                                      // at index 0.
+                                      key: ValueKey(
+                                        'deck-${state.deck.map((p) => p.id).join(',')}',
+                                      ),
                                       controller: _swiper,
                                       cardCount: state.deck.length,
+                                      // Last card swiped → fetch a fresh deck
+                                      // (backend excludes already-swiped pets).
+                                      // An empty reload shows the EmptyState.
+                                      onEnd: () {
+                                        if (_activePet != null) {
+                                          context
+                                              .read<DiscoverBloc>()
+                                              .add(DeckLoaded(_activePet!.id));
+                                        }
+                                      },
                                       cardBuilder: (_, i) =>
                                           PetCard(pet: state.deck[i]),
                                       onSwipeEnd: (prev, target, activity) {

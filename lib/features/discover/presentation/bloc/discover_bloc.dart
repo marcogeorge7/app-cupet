@@ -95,9 +95,13 @@ class DiscoverBloc extends Bloc<DiscoverEvent, DiscoverState> {
   }
 
   Future<void> _onSwipe(CardSwiped event, Emitter<DiscoverState> emit) async {
-    final remaining =
-        state.deck.where((p) => p.id != event.toPetId).toList(growable: false);
-    emit(state.copyWith(status: DiscoverStatus.swiping, deck: remaining));
+    // Do NOT remove the swiped card from the deck. AppinioSwiper owns its own
+    // card index and advances it on every swipe; mutating (shrinking) the deck
+    // out from under it desyncs that index and makes cardBuilder read past the
+    // end of the list (RangeError → black screen). The swiper consumes cards
+    // itself and fires onEnd when the deck is exhausted, which reloads a fresh
+    // deck (the backend excludes already-swiped pets).
+    emit(state.copyWith(status: DiscoverStatus.swiping));
     try {
       final outcome = await _remote.swipe(
         fromPetId: event.fromPetId,
@@ -109,8 +113,11 @@ class DiscoverBloc extends Bloc<DiscoverEvent, DiscoverState> {
         match: outcome.match,
       ));
     } catch (e) {
+      // A single failed swipe POST must not blow away the whole deck — the
+      // full-screen error state is reserved for deck-load failures. Keep the
+      // deck visible so the user can carry on swiping.
       emit(state.copyWith(
-        status: DiscoverStatus.error,
+        status: DiscoverStatus.ready,
         errorMessage: Failure.fromDio(e).message,
       ));
     }

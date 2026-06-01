@@ -43,6 +43,12 @@ post_install do |installer|
       # Some pods ship with a 9.0 deployment target, which Xcode now rejects
       # (supported range starts at 12.0). Pin every pod to the project minimum.
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      # Emit dSYMs for every pod (incl. source-built frameworks like
+      # objective_c) so App Store Connect symbol upload stops warning about
+      # missing dSYMs. Archive configs only — keep Debug builds fast.
+      if %w[Release Profile].include?(config.name)
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+      end
     end
   end
 end
