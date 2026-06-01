@@ -24,10 +24,9 @@ platform :ios do
       key_filepath: key_path,
     )
 
-    # The distribution certificate (+ private key) is imported into the keychain
-    # by the workflow's "Import distribution certificate" step before this runs.
-    # With the cert present we can fetch/create the matching App Store profile and
-    # sign manually — deterministic and stable across CI runs.
+    # Fetch/create the App Store profile (installed locally) so the EXPORT step
+    # can reference it by name. The distribution cert was imported by the
+    # workflow step before this runs.
     get_provisioning_profile(
       api_key: api_key,
       app_identifier: "app.cupet.cupetApp",
@@ -41,10 +40,17 @@ platform :ios do
       output_directory: "build",
       output_name: "cupet.ipa",
       export_method: "app-store",
-      xcargs: "CODE_SIGN_STYLE=Manual " \
-              "DEVELOPMENT_TEAM=MR6847N3F7 " \
-              "PROVISIONING_PROFILE_SPECIFIER='#{profile_name}' " \
-              "CODE_SIGN_IDENTITY='Apple Distribution'",
+      # ARCHIVE with AUTOMATIC signing. A global manual profile (xcargs) gets
+      # applied to every target, but the Swift Package / Pod dependencies
+      # (Firebase, GoogleUtilities, AblyDeltaCodec, …) can't take a provisioning
+      # profile and error out. The API key + imported dist cert let Xcode resolve
+      # the Runner app's signing; dependencies sign with no profile, as required.
+      xcargs: "-allowProvisioningUpdates " \
+              "-authenticationKeyPath #{key_path} " \
+              "-authenticationKeyID #{key_id} " \
+              "-authenticationKeyIssuerID #{issuer_id}",
+      # The EXPORT only signs the app, so an explicit profile mapping here is safe
+      # (this is what the automatic export couldn't resolve on Xcode 26).
       export_options: {
         method: "app-store",
         signingStyle: "manual",
