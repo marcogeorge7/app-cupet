@@ -15,28 +15,24 @@ platform :ios do
       is_key_content_base64: true,
     )
 
-    profile = ENV.fetch("PROFILE_NAME")
-
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
       configuration: "Release",
       output_directory: "build",
       output_name: "cupet.ipa",
-      # Force manual signing for the archive so CI is reproducible (the project
-      # otherwise uses automatic signing, which needs interactive provisioning).
-      xcargs: "CODE_SIGN_STYLE=Manual " \
-              "DEVELOPMENT_TEAM=MR6847N3F7 " \
-              "PROVISIONING_PROFILE_SPECIFIER='#{profile}' " \
-              "CODE_SIGN_IDENTITY='Apple Distribution'",
       export_method: "app-store",
+      # Automatic signing: xcodebuild creates/fetches the distribution cert + App
+      # Store profile for team MR6847N3F7 using the App Store Connect API key, so
+      # there is no cert/profile to manage in CI.
+      api_key: api_key,
+      xcargs: "-allowProvisioningUpdates",
       export_options: {
         method: "app-store",
-        signingStyle: "manual",
         teamID: "MR6847N3F7",
-        provisioningProfiles: { "app.cupet.cupetApp" => profile },
-        # No Crashlytics in this app, so skip dSYM upload — this is what silences
-        # the "Upload Symbols Failed" warnings for Runner.app / objective_c.
+        signingStyle: "automatic",
+        # No Crashlytics, so skip dSYM upload — silences the "Upload Symbols
+        # Failed" warnings for Runner.app / objective_c.
         uploadSymbols: false,
       },
     )

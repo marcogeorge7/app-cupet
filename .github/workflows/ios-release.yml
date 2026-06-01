@@ -58,18 +58,6 @@ jobs:
           --build-name=${{ steps.ver.outputs.version }}
           --build-number=${{ steps.ver.outputs.build }}
 
-      - name: Import distribution certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.IOS_DIST_CERT_P12 }}
-          p12-password: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
-
-      - name: Install provisioning profile
-        run: |
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode \
-            > "$HOME/Library/MobileDevice/Provisioning Profiles/cupet_appstore.mobileprovision"
-
       - name: CocoaPods
         working-directory: ios
         run: |
@@ -82,5 +70,8 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          PROFILE_NAME: ${{ secrets.IOS_PROFILE_NAME }}
         run: bundle exec fastlane beta
+
+      - name: Print full build log on failure
+        if: failure()
+        run: cat "$HOME/Library/Logs/gym/"*.log 2>/dev/null || true
