@@ -8,12 +8,30 @@ default_platform(:ios)
 platform :ios do
   desc "Archive and upload to TestFlight (submit for review manually in App Store Connect)"
   lane :beta do
+    key_id = ENV.fetch("ASC_KEY_ID")
+    issuer_id = ENV.fetch("ASC_ISSUER_ID")
+
+    # Write the base64 .p8 to a file so both xcodebuild (signing) and the upload
+    # step can use the App Store Connect API key.
+    require "base64"
+    require "tmpdir"
+    key_path = File.join(Dir.tmpdir, "asc_api_key.p8")
+    File.write(key_path, Base64.decode64(ENV.fetch("ASC_KEY_P8")))
+
     api_key = app_store_connect_api_key(
-      key_id: ENV.fetch("ASC_KEY_ID"),
-      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
-      key_content: ENV.fetch("ASC_KEY_P8"),
-      is_key_content_base64: true,
+      key_id: key_id,
+      issuer_id: issuer_id,
+      key_filepath: key_path,
     )
+
+    # Automatic signing: xcodebuild creates/fetches the distribution cert + App
+    # Store profile for team MR6847N3F7 using the API key. `build_app` has no
+    # `api_key` option in this fastlane version, so the key is passed straight to
+    # xcodebuild via xcargs (archive) and export_xcargs (export).
+    auth = "-allowProvisioningUpdates " \
+           "-authenticationKeyPath #{key_path} " \
+           "-authenticationKeyID #{key_id} " \
+           "-authenticationKeyIssuerID #{issuer_id}"
 
     build_app(
       workspace: "Runner.xcworkspace",
@@ -22,11 +40,8 @@ platform :ios do
       output_directory: "build",
       output_name: "cupet.ipa",
       export_method: "app-store",
-      # Automatic signing: xcodebuild creates/fetches the distribution cert + App
-      # Store profile for team MR6847N3F7 using the App Store Connect API key, so
-      # there is no cert/profile to manage in CI.
-      api_key: api_key,
-      xcargs: "-allowProvisioningUpdates",
+      xcargs: auth,
+      export_xcargs: auth,
       export_options: {
         method: "app-store",
         teamID: "MR6847N3F7",
