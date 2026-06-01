@@ -24,14 +24,20 @@ platform :ios do
       key_filepath: key_path,
     )
 
-    # Automatic signing: xcodebuild creates/fetches the distribution cert + App
-    # Store profile for team MR6847N3F7 using the API key. `build_app` has no
-    # `api_key` option in this fastlane version, so the key is passed straight to
-    # xcodebuild via xcargs (archive) and export_xcargs (export).
+    # The ARCHIVE uses automatic signing (provisions + installs the distribution
+    # cert via the API key). The EXPORT on Xcode 26 needs an EXPLICIT profile
+    # mapping, so fetch/create an App Store profile (and install it) and feed its
+    # name to the export step below.
     auth = "-allowProvisioningUpdates " \
            "-authenticationKeyPath #{key_path} " \
            "-authenticationKeyID #{key_id} " \
            "-authenticationKeyIssuerID #{issuer_id}"
+
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "app.cupet.cupetApp",
+    )
+    profile_name = lane_context[SharedValues::SIGH_NAME]
 
     build_app(
       workspace: "Runner.xcworkspace",
@@ -40,12 +46,12 @@ platform :ios do
       output_directory: "build",
       output_name: "cupet.ipa",
       export_method: "app-store",
-      xcargs: auth,
-      export_xcargs: auth,
+      xcargs: auth, # automatic signing for the archive
       export_options: {
         method: "app-store",
+        signingStyle: "manual",
         teamID: "MR6847N3F7",
-        signingStyle: "automatic",
+        provisioningProfiles: { "app.cupet.cupetApp" => profile_name },
         # No Crashlytics, so skip dSYM upload — silences the "Upload Symbols
         # Failed" warnings for Runner.app / objective_c.
         uploadSymbols: false,
