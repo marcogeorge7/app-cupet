@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injector.dart';
+import '../../../../core/messaging/badge_service.dart';
 import '../../../../core/realtime/realtime_user_service.dart';
 import '../../../../shared/widgets/cupet_logo.dart';
 import '../../../../shared/widgets/empty_state.dart';
@@ -49,8 +50,17 @@ class _MatchesPageState extends State<MatchesPage> {
     final userId = context.watch<AuthBloc>().state.user?.id ?? -1;
     return Scaffold(
       appBar: AppBar(title: const CupetWordmarkLogo(height: 28)),
-      body: BlocBuilder<MatchesBloc, MatchesState>(
-        builder: (context, state) {
+      body: BlocListener<MatchesBloc, MatchesState>(
+        listenWhen: (p, c) => p.matches != c.matches,
+        listener: (context, state) {
+          // Keep the OS app-icon badge in sync with the live unread total while
+          // the app is open (it's cleared on resume; this re-asserts the truth).
+          final total =
+              state.matches.fold<int>(0, (sum, m) => sum + m.unreadCount);
+          getIt<BadgeService>().setCount(total);
+        },
+        child: BlocBuilder<MatchesBloc, MatchesState>(
+          builder: (context, state) {
           if (state.status == MatchesStatus.loading && state.matches.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -142,7 +152,8 @@ class _MatchesPageState extends State<MatchesPage> {
               },
             ),
           );
-        },
+          },
+        ),
       ),
     );
   }

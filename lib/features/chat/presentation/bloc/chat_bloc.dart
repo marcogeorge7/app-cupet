@@ -246,10 +246,12 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       }
     }));
 
-    // Typing whisper — the server relays only to other members, so any frame
-    // we receive is the peer's.
+    // Typing whisper. Ably's `echoMessages: false` should keep our own frames
+    // off this stream, but don't rely on it across reconnects/platforms: the
+    // payload carries the sender's id, so explicitly drop our own echo.
     _eventSubs.add(_socket.on('client-typing').listen((data) {
       if ((data['conversation_id'] as num?)?.toInt() != conversationId) return;
+      if ((data['user_id'] as num?)?.toInt() == _myUserId) return;
       add(_ChatPeerTyping(data['typing'] == true));
     }));
   }

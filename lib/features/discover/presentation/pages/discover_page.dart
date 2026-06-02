@@ -209,6 +209,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                               onRefresh: _refresh,
                               child: const _ScrollableCenter(
                                 child: EmptyState(
+                                  illustration:
+                                      CupetLogo(size: 140, showWordmark: false),
                                   title: 'No more pets nearby',
                                   subtitle:
                                       'Check back soon for new fluffballs.',

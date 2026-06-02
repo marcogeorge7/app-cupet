@@ -6,6 +6,7 @@ import '../../features/auth/data/country_remote_data_source.dart';
 import '../../features/auth/domain/auth_repository.dart';
 import '../auth/session_event_bus.dart';
 import '../messaging/active_chat_tracker.dart';
+import '../messaging/badge_service.dart';
 import '../messaging/fcm_service.dart';
 import '../navigation/navigation_service.dart';
 import '../../features/chat/data/message_remote_data_source.dart';
@@ -33,6 +34,7 @@ void configureInjector() {
   );
   getIt.registerLazySingleton<NavigationService>(NavigationService.new);
   getIt.registerLazySingleton<ActiveChatTracker>(ActiveChatTracker.new);
+  getIt.registerLazySingleton<BadgeService>(BadgeService.new);
 
   getIt.registerLazySingleton<AuthRemoteDataSource>(
     () => AuthRemoteDataSource(getIt()),

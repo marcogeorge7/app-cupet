@@ -102,6 +102,10 @@ class RealtimeUserService {
       final channel = 'user.$userId';
       _channelName = channel;
       await _socket.subscribe(channel);
+      // Announce presence so the backend can tell the app is open and skip a
+      // redundant FCM push (the realtime events below cover an open app). The
+      // connection drops on background, so presence auto-leaves when closed.
+      await _socket.enterPresence(channel);
       // `match.created` only reaches this user's own channel, so no filtering.
       _subscription = _socket.on('match.created').listen((data) {
         // A new conversation now exists; refresh the token so the chat screen

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../core/auth/session_event_bus.dart';
 import '../core/di/injector.dart';
 import '../core/messaging/active_chat_tracker.dart';
+import '../core/messaging/badge_service.dart';
 import '../core/messaging/fcm_service.dart';
 import '../core/navigation/navigation_service.dart';
 import '../core/realtime/realtime_user_service.dart';
@@ -143,6 +144,10 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
         // below; the OS would anyway, and the short-lived JWT expires). Reopen
         // it on resume — ChatBloc then resyncs missed messages via REST cursor.
         realtime.onAppResumed();
+        // The user is back in the app, so drop the OS app-icon badge the push
+        // set while away. The Matches list re-asserts the live unread total when
+        // it (re)loads.
+        getIt<BadgeService>().clear();
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
         // Don't hold a socket open behind a hidden screen: the OS will suspend
@@ -190,9 +195,13 @@ class _CupetAppState extends State<CupetApp> with WidgetsBindingObserver {
       // fresh install, so without this a newly-signed-in device gets no push
       // until the next app restart.
       getIt<FcmService>().syncToken();
+      // Foregrounded + signed in → clear any stale push badge; the Matches list
+      // re-asserts the live unread total on load.
+      getIt<BadgeService>().clear();
       _replayDeepLink();
     } else if (state.status == AuthStatus.unauthenticated) {
       realtime.stop();
+      getIt<BadgeService>().clear();
     }
   }
 

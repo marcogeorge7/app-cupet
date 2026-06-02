@@ -25,6 +25,11 @@ class SocketHubClient {
   final Set<String> _subscribed = {};
   final Map<String, StreamSubscription<ably.Message>> _channelSubs = {};
 
+  /// Channels we announce presence on (e.g. `user.{id}`) so the backend can
+  /// tell the app is open and skip a redundant push. Re-entered on (re)connect;
+  /// closing the connection on background drops them automatically.
+  final Set<String> _presence = {};
+
   /// One broadcast controller per event name we surface.
   final Map<String, StreamController<Map<String, dynamic>>> _events = {};
 
@@ -108,11 +113,29 @@ class SocketHubClient {
 
   Future<void> unsubscribe(String channel) async {
     _subscribed.remove(channel);
+    _presence.remove(channel);
     await _channelSubs.remove(channel)?.cancel();
     try {
       await _realtime?.channels.get(channel).detach();
     } catch (_) {
-      // best-effort
+      // best-effort (detaching also leaves presence)
+    }
+  }
+
+  /// Announce presence on [channel] so a server-side presence query sees us as
+  /// online. Idempotent; re-entered on every (re)connect.
+  Future<void> enterPresence(String channel) async {
+    _presence.add(channel);
+    await _enterPresence(channel);
+  }
+
+  Future<void> _enterPresence(String channel) async {
+    final realtime = _realtime;
+    if (realtime == null || !isConnected) return;
+    try {
+      await realtime.channels.get(channel).presence.enter();
+    } catch (e) {
+      debugPrint('Ably presence enter failed for $channel: $e');
     }
   }
 
@@ -133,6 +156,9 @@ class SocketHubClient {
   void _resubscribe() {
     for (final channel in _subscribed) {
       _attach(channel);
+    }
+    for (final channel in _presence) {
+      unawaited(_enterPresence(channel));
     }
   }
 
@@ -193,6 +219,7 @@ class SocketHubClient {
     }
     _events.clear();
     _subscribed.clear();
+    _presence.clear();
     await _connectionState.close();
     await _sessionRevoked.close();
     final realtime = _realtime;

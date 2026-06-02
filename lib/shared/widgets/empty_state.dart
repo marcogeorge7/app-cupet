@@ -8,12 +8,16 @@ class EmptyState extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.action,
+    this.illustration,
     this.mood = GermeenMood.sleepy,
   });
 
   final String title;
   final String? subtitle;
   final Widget? action;
+
+  /// Overrides the default vector [Germeen] hero — e.g. the brand logo mascot.
+  final Widget? illustration;
   final GermeenMood mood;
 
   @override
@@ -24,7 +28,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Germeen(size: 140, mood: mood),
+            illustration ?? Germeen(size: 140, mood: mood),
             const SizedBox(height: 24),
             Text(
               title,
