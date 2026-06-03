@@ -94,6 +94,19 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: _PetTile(pet: pet),
                     );
                   }),
+                const SizedBox(height: 24),
+                const _SectionHeader(title: 'Safety'),
+                const SizedBox(height: 8),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    leading: const Icon(Icons.block),
+                    title: const Text('Blocked users'),
+                    subtitle: const Text("Manage people you've blocked"),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/profile/blocked'),
+                  ),
+                ),
               ],
             ),
           );

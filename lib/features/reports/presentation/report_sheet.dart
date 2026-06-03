@@ -13,6 +13,8 @@ const _reasons = [
 Future<void> showReportSheet(BuildContext context, int petId) async {
   String? selectedReason;
   final detailsCtrl = TextEditingController();
+  final messenger = ScaffoldMessenger.of(context);
+  var reported = false;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -62,15 +64,27 @@ Future<void> showReportSheet(BuildContext context, int petId) async {
                   onPressed: selectedReason == null
                       ? null
                       : () async {
-                          await getIt<ReportRemoteDataSource>().reportPet(
-                            petId: petId,
-                            reason: selectedReason!,
-                            details: detailsCtrl.text.trim().isEmpty
-                                ? null
-                                : detailsCtrl.text.trim(),
-                          );
-                          if (sheetContext.mounted) {
-                            Navigator.of(sheetContext).pop();
+                          try {
+                            await getIt<ReportRemoteDataSource>().reportPet(
+                              petId: petId,
+                              reason: selectedReason!,
+                              details: detailsCtrl.text.trim().isEmpty
+                                  ? null
+                                  : detailsCtrl.text.trim(),
+                            );
+                            reported = true;
+                            if (sheetContext.mounted) {
+                              Navigator.of(sheetContext).pop();
+                            }
+                          } catch (_) {
+                            if (sheetContext.mounted) {
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Could not send report. Please try again.'),
+                                ),
+                              );
+                            }
                           }
                         },
                   child: const Text('Send report'),
@@ -82,4 +96,12 @@ Future<void> showReportSheet(BuildContext context, int petId) async {
       );
     },
   );
+
+  detailsCtrl.dispose();
+
+  if (reported) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Thanks — our team will review this.')),
+    );
+  }
 }

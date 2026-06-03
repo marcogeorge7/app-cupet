@@ -10,6 +10,7 @@ import '../features/auth/presentation/pages/otp_verify_page.dart';
 import '../features/auth/presentation/pages/phone_input_page.dart';
 import '../features/auth/presentation/pages/registration_page.dart';
 import '../features/auth/presentation/pages/splash_page.dart';
+import '../features/blocks/presentation/blocked_users_page.dart';
 import '../features/chat/data/message_remote_data_source.dart';
 import '../features/chat/presentation/bloc/chat_bloc.dart';
 import '../features/chat/presentation/pages/chat_page.dart';
@@ -101,6 +102,10 @@ GoRouter buildRouter(AuthBloc authBloc) {
         builder: (_, _) => const NewPetPage(),
       ),
       GoRoute(
+        path: '/profile/blocked',
+        builder: (_, _) => const BlockedUsersPage(),
+      ),
+      GoRoute(
         path: '/profile/pet/:id',
         redirect: (_, state) {
           final raw = state.pathParameters['id'];
@@ -149,6 +154,12 @@ GoRouter buildRouter(AuthBloc authBloc) {
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id']!);
           final title = state.uri.queryParameters['title'];
+          // Optional — present when opened from the Matches list, absent for
+          // FCM deep links. Drive the chat's Report/Block menu.
+          final peerPetId =
+              int.tryParse(state.uri.queryParameters['peerPetId'] ?? '');
+          final peerUserId =
+              int.tryParse(state.uri.queryParameters['peerUserId'] ?? '');
           final myUserId = context.read<AuthBloc>().state.user?.id;
           return BlocProvider(
             create: (_) => ChatBloc(
@@ -156,7 +167,12 @@ GoRouter buildRouter(AuthBloc authBloc) {
               socket: getIt(),
               myUserId: myUserId,
             ),
-            child: ChatPage(conversationId: id, title: title),
+            child: ChatPage(
+              conversationId: id,
+              title: title,
+              peerPetId: peerPetId,
+              peerUserId: peerUserId,
+            ),
           );
         },
       ),

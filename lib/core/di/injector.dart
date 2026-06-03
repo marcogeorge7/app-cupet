@@ -12,6 +12,7 @@ import '../navigation/navigation_service.dart';
 import '../../features/chat/data/message_remote_data_source.dart';
 import '../../features/discover/data/discover_remote_data_source.dart';
 import '../../features/matches/data/match_remote_data_source.dart';
+import '../../features/blocks/data/block_remote_data_source.dart';
 import '../../features/profile/data/pet_remote_data_source.dart';
 import '../../features/profile/domain/pet_repository.dart';
 import '../../features/reports/data/report_remote_data_source.dart';
@@ -65,5 +66,8 @@ void configureInjector() {
   );
   getIt.registerLazySingleton<ReportRemoteDataSource>(
     () => ReportRemoteDataSource(getIt()),
+  );
+  getIt.registerLazySingleton<BlockRemoteDataSource>(
+    () => BlockRemoteDataSource(getIt()),
   );
 }

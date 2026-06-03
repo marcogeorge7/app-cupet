@@ -12,6 +12,7 @@ import '../../../../shared/widgets/cupet_logo.dart';
 import '../../../../shared/widgets/empty_state.dart';
 import '../../../../shared/widgets/germeen.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../blocks/presentation/block_sheet.dart';
 import '../../../reports/presentation/report_sheet.dart';
 import '../bloc/matches_bloc.dart';
 
@@ -133,19 +134,38 @@ class _MatchesPageState extends State<MatchesPage> {
                         onSelected: (value) {
                           if (value == 'report') {
                             showReportSheet(context, other.id);
+                          } else if (value == 'block') {
+                            showBlockSheet(
+                              context,
+                              userId: other.userId,
+                              name: other.name,
+                              onBlocked: () => context
+                                  .read<MatchesBloc>()
+                                  .add(const MatchesLoaded()),
+                            );
                           }
                         },
                         itemBuilder: (_) => const [
                           PopupMenuItem(value: 'report', child: Text('Report')),
+                          PopupMenuItem(value: 'block', child: Text('Block')),
                         ],
                       ),
                     ],
                   ),
-                  onTap: () {
+                  onTap: () async {
                     if (match.conversationId != null) {
-                      context.push(
-                        '/chat/${match.conversationId}?title=${Uri.encodeComponent(other.name)}',
+                      // Pass the peer's pet + user ids so the chat screen can
+                      // offer Report/Block. Reload on return so a block made
+                      // inside the chat drops the row immediately.
+                      await context.push(
+                        '/chat/${match.conversationId}'
+                        '?title=${Uri.encodeComponent(other.name)}'
+                        '&peerPetId=${other.id}'
+                        '&peerUserId=${other.userId}',
                       );
+                      if (context.mounted) {
+                        context.read<MatchesBloc>().add(const MatchesLoaded());
+                      }
                     }
                   },
                 );

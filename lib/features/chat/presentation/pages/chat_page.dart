@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app/theme.dart';
@@ -7,13 +8,26 @@ import '../../../../core/di/injector.dart';
 import '../../../../core/messaging/active_chat_tracker.dart';
 import '../../../../shared/models/message.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../blocks/presentation/block_sheet.dart';
+import '../../../reports/presentation/report_sheet.dart';
 import '../bloc/chat_bloc.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key, required this.conversationId, this.title});
+  const ChatPage({
+    super.key,
+    required this.conversationId,
+    this.title,
+    this.peerPetId,
+    this.peerUserId,
+  });
 
   final int conversationId;
   final String? title;
+
+  /// Peer identifiers used by the Report/Block menu. Present when the chat is
+  /// opened from the Matches list; null for FCM deep links (menu hidden then).
+  final int? peerPetId;
+  final int? peerUserId;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -102,6 +116,9 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final myId = context.watch<AuthBloc>().state.user?.id;
+    final peerName = widget.title ?? 'this user';
+    final canReport = widget.peerPetId != null;
+    final canBlock = widget.peerUserId != null;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -130,6 +147,34 @@ class _ChatPageState extends State<ChatPage> {
             ],
           ),
         ),
+        actions: [
+          if (canReport || canBlock)
+            PopupMenuButton<String>(
+              tooltip: 'Report or block',
+              onSelected: (value) {
+                if (value == 'report' && canReport) {
+                  showReportSheet(context, widget.peerPetId!);
+                } else if (value == 'block' && canBlock) {
+                  showBlockSheet(
+                    context,
+                    userId: widget.peerUserId!,
+                    name: peerName,
+                    // Leave the chat after blocking; the Matches list reloads
+                    // on return and the now-blocked conversation is gone.
+                    onBlocked: () {
+                      if (context.mounted) context.pop();
+                    },
+                  );
+                }
+              },
+              itemBuilder: (_) => [
+                if (canReport)
+                  const PopupMenuItem(value: 'report', child: Text('Report')),
+                if (canBlock)
+                  const PopupMenuItem(value: 'block', child: Text('Block')),
+              ],
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(

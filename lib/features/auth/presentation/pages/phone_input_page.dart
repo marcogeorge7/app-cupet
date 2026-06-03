@@ -1,7 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/di/injector.dart';
 import '../../../../shared/models/country.dart';
 import '../../data/country_remote_data_source.dart';
@@ -22,9 +25,16 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
   List<Country> _countries = kFallbackCountries;
   Country _selected = kFallbackCountries.first;
 
+  /// Apple Guideline 1.2: the user must agree to the terms (with the
+  /// zero-tolerance clause) before they can register/log in. The "Send code"
+  /// button stays disabled until this is ticked.
+  bool _agreed = false;
+  late final TapGestureRecognizer _privacyTap;
+
   @override
   void initState() {
     super.initState();
+    _privacyTap = TapGestureRecognizer()..onTap = _openPrivacy;
     _loadCountries();
   }
 
@@ -51,13 +61,31 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
 
   @override
   void dispose() {
+    _privacyTap.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
+  Future<void> _openPrivacy() async {
+    final uri = Uri.parse(AppConfig.privacyPolicyUrl);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (!ok) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the Privacy Policy.')),
+        );
+      }
+    }
+  }
+
   void _submit() {
     _focusNode.unfocus();
+    if (!_agreed) return;
     if (!_formKey.currentState!.validate()) return;
 
     final raw = _controller.text.trim();
@@ -196,13 +224,53 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
                       );
                     },
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: Checkbox(
+                          value: _agreed,
+                          onChanged: (v) =>
+                              setState(() => _agreed = v ?? false),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text.rich(
+                            TextSpan(
+                              style: Theme.of(context).textTheme.bodySmall,
+                              children: [
+                                const TextSpan(text: 'I agree to the '),
+                                TextSpan(
+                                  text: 'Privacy Policy',
+                                  recognizer: _privacyTap,
+                                  style: TextStyle(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                                const TextSpan(text: '.'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   BlocBuilder<AuthBloc, AuthState>(
                     buildWhen: (prev, curr) => prev.status != curr.status,
                     builder: (context, state) {
                       final loading = state.status == AuthStatus.sendingOtp;
                       return ElevatedButton(
-                        onPressed: loading ? null : _submit,
+                        onPressed: (loading || !_agreed) ? null : _submit,
                         child: loading
                             ? const SizedBox(
                                 height: 20,

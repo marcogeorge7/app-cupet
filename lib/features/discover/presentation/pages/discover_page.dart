@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../shared/models/pet.dart';
 import '../../../../shared/widgets/empty_state.dart';
 import '../../../../shared/widgets/cupet_logo.dart';
+import '../../../blocks/presentation/block_sheet.dart';
 import '../../../profile/presentation/bloc/pet_bloc.dart';
 import '../../../reports/presentation/report_sheet.dart';
 import '../bloc/discover_bloc.dart';
@@ -155,17 +156,36 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       },
                     ),
                   if (state.deck.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.flag_outlined),
-                      tooltip: 'Report top card',
-                      onPressed: () {
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      tooltip: 'Report or block',
+                      onSelected: (value) {
                         // The deck is stable now, so the visible card is the
                         // swiper's current index — not deck.first.
                         final i = _swiper.cardIndex ?? 0;
-                        if (i >= 0 && i < state.deck.length) {
-                          showReportSheet(context, state.deck[i].id);
+                        if (i < 0 || i >= state.deck.length) return;
+                        final pet = state.deck[i];
+                        if (value == 'report') {
+                          showReportSheet(context, pet.id);
+                        } else if (value == 'block') {
+                          showBlockSheet(
+                            context,
+                            userId: pet.userId,
+                            name: pet.name,
+                            onBlocked: () {
+                              if (_activePet != null) {
+                                context
+                                    .read<DiscoverBloc>()
+                                    .add(DeckLoaded(_activePet!.id));
+                              }
+                            },
+                          );
                         }
                       },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'report', child: Text('Report')),
+                        PopupMenuItem(value: 'block', child: Text('Block')),
+                      ],
                     ),
                 ],
               ),

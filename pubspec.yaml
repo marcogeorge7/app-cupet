@@ -56,6 +56,9 @@ dependencies:
   ably_flutter: ^1.2.44
   app_badge_plus: ^1.2.10
 
+  # Open the Privacy Policy link in an in-app browser
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
