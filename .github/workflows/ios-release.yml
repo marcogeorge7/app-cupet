@@ -70,6 +70,11 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          # `xcodebuild -showBuildSettings` (called by gym) is slow on a cold CI
+          # runner with this Pod/SPM graph — fastlane's 3s default times out. Give
+          # it a generous base timeout + a few more retries.
+          FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "120"
+          FASTLANE_XCODEBUILD_SETTINGS_RETRIES: "6"
         # `flutter build ios` above already ran `pod install`, so we go straight
         # to archiving. `bundle install` only brings in fastlane.
         run: |
