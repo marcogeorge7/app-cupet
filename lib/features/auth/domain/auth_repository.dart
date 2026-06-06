@@ -15,9 +15,9 @@ class PendingPhoneVerification {
     this.channel,
   });
 
-  /// For the Twilio OTP flow this carries the phone number itself —
-  /// the field is kept named `verificationId` so callers (Bloc, UI)
-  /// don't need to change.
+  /// Firebase's opaque verification-session id from `verifyPhoneNumber`'s
+  /// `codeSent` callback. It is combined with the user-entered SMS code via
+  /// `PhoneAuthProvider.credential` to sign in.
   final String verificationId;
   final int? resendToken;
   final String? channel;
@@ -52,10 +52,14 @@ class AuthRepository {
     return token != null && token.isNotEmpty;
   }
 
-  /// Sends an OTP to [phoneNumber] via the backend (Twilio WhatsApp/SMS,
-  /// or the configured test-phone bypass). Calls [onCodeSent] when the
-  /// backend confirms dispatch. [onAutoSignIn] is unused on this transport
-  /// but kept in the signature so the Bloc contract is unchanged.
+  /// Starts Firebase phone verification for [phoneNumber] (E.164). Firebase
+  /// sends the SMS itself and drives the flow through callbacks:
+  ///   - [onCodeSent] once the SMS is dispatched — carries the verificationId
+  ///     that the user's typed code is later combined with;
+  ///   - [onAutoSignIn] on Android instant-validation / SMS auto-retrieval,
+  ///     where the code never has to be typed;
+  ///   - [onError] for an invalid number, quota/throttling, or a device-check
+  ///     failure (reCAPTCHA / Play Integrity / APNs).
   Future<void> sendOtp({
     required String phoneNumber,
     required void Function(PendingPhoneVerification) onCodeSent,
@@ -63,13 +67,33 @@ class AuthRepository {
     required void Function(Failure) onError,
   }) async {
     try {
-      final result = await _remote.requestOtp(phoneNumber);
-      onCodeSent(PendingPhoneVerification(
-        verificationId: phoneNumber,
-        channel: result.channel,
-      ));
+      await _firebaseAuth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (fb.PhoneAuthCredential credential) async {
+          try {
+            final cred = await _firebaseAuth.signInWithCredential(credential);
+            onAutoSignIn(cred);
+          } catch (e) {
+            onError(_firebaseFailure(e));
+          }
+        },
+        verificationFailed: (fb.FirebaseAuthException e) =>
+            onError(_firebaseFailure(e)),
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(PendingPhoneVerification(
+            verificationId: verificationId,
+            resendToken: resendToken,
+            // Firebase always delivers via SMS; surface that on the OTP screen.
+            channel: 'sms',
+          ));
+        },
+        // Auto-retrieval window closed: the codeSent verificationId stays valid
+        // for manual entry, so there's nothing to do here.
+        codeAutoRetrievalTimeout: (String verificationId) {},
+      );
     } catch (e) {
-      onError(Failure.fromDio(e));
+      onError(_firebaseFailure(e));
     }
   }
 
@@ -78,16 +102,17 @@ class AuthRepository {
     required String smsCode,
   }) async {
     try {
-      final result = await _remote.verifyOtp(
-        phone: pending.verificationId,
-        code: smsCode,
-        deviceName: _deviceName(),
+      final credential = fb.PhoneAuthProvider.credential(
+        verificationId: pending.verificationId,
+        smsCode: smsCode,
       );
-      await _storage.save(result.token);
-      _cachedUser = result.user;
-      return result.user;
-    } catch (e) {
-      throw Failure.fromDio(e);
+      final cred = await _firebaseAuth.signInWithCredential(credential);
+      // Firebase is satisfied; hand the ID token to the backend, which mints
+      // our Sanctum session (and on failure throws its own Dio-mapped Failure
+      // that propagates past the FirebaseAuthException handler below).
+      return await signInWithCredential(cred);
+    } on fb.FirebaseAuthException catch (e) {
+      throw _firebaseFailure(e);
     }
   }
 
@@ -178,10 +203,9 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    // Each step is best-effort: a failure on the backend or in Firebase
-    // (which may not even be initialised — sign-in goes through Twilio OTP,
-    // not Firebase Auth) must NOT prevent us from clearing the local token,
-    // otherwise the UI stays stuck on an "authenticated" router state.
+    // Each step is best-effort: a failure on the backend or in Firebase must
+    // NOT prevent us from clearing the local token, otherwise the UI stays
+    // stuck on an "authenticated" router state.
     try {
       await _remote.logout();
     } catch (_) {}
@@ -228,6 +252,31 @@ class AuthRepository {
       await _storage.clear();
     } catch (_) {}
     _cachedUser = null;
+  }
+
+  /// Map a Firebase phone-auth error to a user-facing [Failure]; anything
+  /// unrecognised falls back to Firebase's own message.
+  Failure _firebaseFailure(Object error) {
+    if (error is fb.FirebaseAuthException) {
+      final message = switch (error.code) {
+        'invalid-phone-number' =>
+          'That phone number looks invalid. Check it and try again.',
+        'invalid-verification-code' =>
+          'That code is incorrect. Please try again.',
+        'invalid-verification-id' || 'session-expired' =>
+          'This code has expired. Request a new one.',
+        'too-many-requests' =>
+          'Too many attempts. Please wait a while and try again.',
+        'quota-exceeded' => 'SMS limit reached. Please try again later.',
+        'network-request-failed' =>
+          'Network error. Check your connection and try again.',
+        'missing-client-identifier' || 'app-not-authorized' =>
+          'Could not verify this device for phone sign-in.',
+        _ => error.message ?? 'Phone verification failed. Please try again.',
+      };
+      return Failure(message);
+    }
+    return Failure(error.toString());
   }
 
   String _platform() {
