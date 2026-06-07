@@ -4,3 +4,9 @@ source "https://rubygems.org"
 # fastlane drives archive + TestFlight upload. `pod install` is handled by
 # `flutter build ios` using the runner's system CocoaPods, so it isn't pinned here.
 gem "fastlane"
+
+# fastlane loads ALL default actions on boot, incl. Play Store ones whose
+# dependency `representable` does a soft `require "multi_json"`. Under bundler 4
+# / Ruby 3.3 that gem must be declared explicitly, otherwise `fastlane` crashes
+# on launch with "multi_json is not part of the bundle".
+gem "multi_json"
