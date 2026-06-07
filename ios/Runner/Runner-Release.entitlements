@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Release/App Store builds talk to PRODUCTION APNs. TestFlight is a
+	  distribution build, so a "development" aps-environment here makes the
+	  device register a SANDBOX push token that Firebase's production silent
+	  push (used by phone-auth device verification + FCM) can't reach — which
+	  forces phone-auth to fall back to reCAPTCHA. Debug/Profile keep
+	  "development" via Runner.entitlements. Keep the two files' other keys in
+	  sync if you add capabilities.
+	-->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>
