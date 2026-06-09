@@ -174,16 +174,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _repository;
 
   Future<void> _onCheck(AuthCheckRequested event, Emitter<AuthState> emit) async {
-    if (await _repository.hasToken()) {
+    if (!await _repository.hasToken()) {
+      emit(state.copyWith(status: AuthStatus.unauthenticated));
+      return;
+    }
+
+    // We have a stored session. Validate it against the backend — but a stored
+    // token must only be discarded when the server actually REJECTS it (a 401,
+    // e.g. the account signed in on another device). A network error / timeout
+    // / 5xx on a cold start must NOT throw the user out to the login screen, so
+    // retry a few times and never clear the token on a non-401 failure. This is
+    // what fixes "I log in, reopen the app, and it shows the login page again".
+    for (var attempt = 0; attempt < 3; attempt++) {
       try {
         final user = await _repository.loadCurrentUser();
         emit(state.copyWith(status: AuthStatus.authenticated, user: user));
-      } catch (e) {
-        emit(state.copyWith(status: AuthStatus.unauthenticated));
+        return;
+      } on Failure catch (f) {
+        if (f.statusCode == 401) {
+          await _repository.clearLocalSession();
+          emit(state.copyWith(status: AuthStatus.unauthenticated));
+          return;
+        }
+        // Transient — wait briefly, then retry without touching the token.
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
       }
-    } else {
-      emit(state.copyWith(status: AuthStatus.unauthenticated));
     }
+
+    // Backend unreachable (offline / down) after retries. Keep the token so the
+    // next launch signs straight back in; fall back to sign-in for now rather
+    // than hanging on the splash screen.
+    emit(state.copyWith(status: AuthStatus.unauthenticated));
   }
 
   Future<void> _onOtpRequested(

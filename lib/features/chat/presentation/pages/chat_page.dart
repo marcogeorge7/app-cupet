@@ -9,6 +9,7 @@ import '../../../../core/messaging/active_chat_tracker.dart';
 import '../../../../shared/models/message.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../blocks/presentation/block_sheet.dart';
+import '../../../matches/data/match_remote_data_source.dart';
 import '../../../reports/presentation/report_sheet.dart';
 import '../bloc/chat_bloc.dart';
 
@@ -19,6 +20,7 @@ class ChatPage extends StatefulWidget {
     this.title,
     this.peerPetId,
     this.peerUserId,
+    this.matchId,
   });
 
   final int conversationId;
@@ -28,6 +30,10 @@ class ChatPage extends StatefulWidget {
   /// opened from the Matches list; null for FCM deep links (menu hidden then).
   final int? peerPetId;
   final int? peerUserId;
+
+  /// Match id used by the Unmatch action. Present when opened from the Matches
+  /// list; null for FCM deep links (Unmatch hidden then).
+  final int? matchId;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -113,12 +119,48 @@ class _ChatPageState extends State<ChatPage> {
         .add(ChatTypingChanged(value.trim().isNotEmpty));
   }
 
+  Future<void> _confirmUnmatch(
+    BuildContext context,
+    int matchId,
+    String name,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Unmatch?'),
+        content: Text(
+          'This removes your match with $name and deletes this conversation '
+          'for both of you. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Unmatch'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await getIt<MatchRemoteDataSource>().unmatch(matchId);
+    } catch (_) {
+      // Best-effort; the Matches list reload on return reconciles either way.
+    }
+    // Leave the chat — the Matches list reloads on return and drops the row.
+    if (context.mounted) context.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final myId = context.watch<AuthBloc>().state.user?.id;
     final peerName = widget.title ?? 'this user';
     final canReport = widget.peerPetId != null;
     final canBlock = widget.peerUserId != null;
+    final canUnmatch = widget.matchId != null;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -148,9 +190,9 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         actions: [
-          if (canReport || canBlock)
+          if (canReport || canBlock || canUnmatch)
             PopupMenuButton<String>(
-              tooltip: 'Report or block',
+              tooltip: 'Options',
               onSelected: (value) {
                 if (value == 'report' && canReport) {
                   showReportSheet(context, widget.peerPetId!);
@@ -165,6 +207,8 @@ class _ChatPageState extends State<ChatPage> {
                       if (context.mounted) context.pop();
                     },
                   );
+                } else if (value == 'unmatch' && canUnmatch) {
+                  _confirmUnmatch(context, widget.matchId!, peerName);
                 }
               },
               itemBuilder: (_) => [
@@ -172,6 +216,9 @@ class _ChatPageState extends State<ChatPage> {
                   const PopupMenuItem(value: 'report', child: Text('Report')),
                 if (canBlock)
                   const PopupMenuItem(value: 'block', child: Text('Block')),
+                if (canUnmatch)
+                  const PopupMenuItem(
+                      value: 'unmatch', child: Text('Unmatch')),
               ],
             ),
         ],

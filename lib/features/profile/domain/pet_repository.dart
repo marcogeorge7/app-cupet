@@ -19,6 +19,7 @@ class PetRepository {
     required PetType type,
     required PetGender gender,
     required String name,
+    String? breed,
     String? bio,
     DateTime? birthdate,
     double? lat,
@@ -31,6 +32,7 @@ class PetRepository {
         'type': type.name,
         'gender': gender.name,
         'name': name,
+        'breed': ?breed,
         'bio': ?bio,
         if (birthdate != null)
           'birthdate': birthdate.toIso8601String().substring(0, 10),
@@ -72,6 +74,23 @@ class PetRepository {
         throw const Failure('Photo upload returned no URL');
       }
       return await _remote.update(petId, {'primary_photo_url': url});
+    } catch (e) {
+      throw Failure.fromDio(e);
+    }
+  }
+
+  /// Upload several photos for a pet (in order), then reload the pet so its
+  /// `photos[]` + `primary_photo_url` reflect the additions. The backend sets
+  /// the first uploaded photo as the primary when the pet has none yet.
+  Future<Pet> uploadPhotos({
+    required int petId,
+    required List<String> filePaths,
+  }) async {
+    try {
+      for (final path in filePaths) {
+        await _remote.uploadPhotoFile(petId, path);
+      }
+      return await _remote.getPet(petId);
     } catch (e) {
       throw Failure.fromDio(e);
     }

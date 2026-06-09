@@ -5,13 +5,18 @@ import '../../../../shared/models/pet.dart';
 import '../../../../shared/widgets/germeen.dart';
 
 class PetCard extends StatelessWidget {
-  const PetCard({super.key, required this.pet});
+  const PetCard({super.key, required this.pet, this.onTap});
 
   final Pet pet;
 
+  /// Tapping the card (a tap, not a swipe) opens the pet's read-only profile.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
@@ -54,6 +59,8 @@ class PetCard extends StatelessWidget {
                   Text(
                     [
                       pet.type.name.toUpperCase(),
+                      if (pet.breed != null && pet.breed!.isNotEmpty)
+                        pet.breed!,
                       pet.gender.name,
                       if (pet.locationName != null) pet.locationName!,
                     ].join(' · '),
@@ -73,6 +80,7 @@ class PetCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

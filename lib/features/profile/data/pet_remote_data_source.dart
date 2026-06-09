@@ -19,6 +19,12 @@ class PetRemoteDataSource {
     return Pet.fromJson(data);
   }
 
+  Future<Pet> getPet(int id) async {
+    final response = await _dio.get('/pets/$id');
+    final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+    return Pet.fromJson(data);
+  }
+
   Future<Pet> update(int id, Map<String, dynamic> payload) async {
     final response = await _dio.put('/pets/$id', data: payload);
     final data = (response.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;

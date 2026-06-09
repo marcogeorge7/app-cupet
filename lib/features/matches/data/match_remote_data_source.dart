@@ -16,4 +16,8 @@ class MatchRemoteDataSource {
         .map((e) => PetMatch.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  Future<void> unmatch(int matchId) async {
+    await _dio.delete('/matches/$matchId');
+  }
 }

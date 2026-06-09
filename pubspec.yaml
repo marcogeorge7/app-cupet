@@ -1,7 +1,7 @@
 name: cupet_app
 description: "CuPet — a dating app for pets."
 publish_to: 'none'
-version: 1.0.3+2
+version: 1.0.4+1
 
 environment:
   sdk: ^3.11.5

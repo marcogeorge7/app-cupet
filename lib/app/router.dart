@@ -24,6 +24,7 @@ import '../features/profile/presentation/bloc/pet_bloc.dart';
 import '../features/profile/presentation/pages/edit_profile_page.dart';
 import '../features/profile/presentation/pages/new_pet_page.dart';
 import '../features/profile/presentation/pages/pet_detail_page.dart';
+import '../shared/models/pet.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import 'home_shell.dart';
 
@@ -143,6 +144,19 @@ GoRouter buildRouter(AuthBloc authBloc) {
         },
       ),
       GoRoute(
+        path: '/pet-profile',
+        parentNavigatorKey: rootNavigatorKey,
+        // Read-only profile of a discovered pet, passed in via `extra` so no
+        // extra fetch is needed (the discover deck already carries the pet).
+        builder: (context, state) {
+          final pet = state.extra;
+          if (pet is! Pet) {
+            return const Scaffold(body: Center(child: Text('Pet not found.')));
+          }
+          return PetProfileView(pet: pet, owner: false);
+        },
+      ),
+      GoRoute(
         path: '/chat/:id',
         redirect: (_, state) {
           final raw = state.pathParameters['id'];
@@ -160,6 +174,8 @@ GoRouter buildRouter(AuthBloc authBloc) {
               int.tryParse(state.uri.queryParameters['peerPetId'] ?? '');
           final peerUserId =
               int.tryParse(state.uri.queryParameters['peerUserId'] ?? '');
+          final matchId =
+              int.tryParse(state.uri.queryParameters['matchId'] ?? '');
           final myUserId = context.read<AuthBloc>().state.user?.id;
           return BlocProvider(
             create: (_) => ChatBloc(
@@ -172,6 +188,7 @@ GoRouter buildRouter(AuthBloc authBloc) {
               title: title,
               peerPetId: peerPetId,
               peerUserId: peerUserId,
+              matchId: matchId,
             ),
           );
         },

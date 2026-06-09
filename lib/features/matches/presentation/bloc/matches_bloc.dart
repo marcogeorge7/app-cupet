@@ -18,6 +18,13 @@ class MatchesLoaded extends MatchesEvent {
   List<Object?> get props => [petId];
 }
 
+class MatchUnmatched extends MatchesEvent {
+  const MatchUnmatched(this.matchId);
+  final int matchId;
+  @override
+  List<Object?> get props => [matchId];
+}
+
 enum MatchesStatus { initial, loading, ready, error }
 
 class MatchesState extends Equatable {
@@ -49,9 +56,30 @@ class MatchesState extends Equatable {
 class MatchesBloc extends Bloc<MatchesEvent, MatchesState> {
   MatchesBloc(this._remote) : super(const MatchesState()) {
     on<MatchesLoaded>(_onLoad);
+    on<MatchUnmatched>(_onUnmatch);
   }
 
   final MatchRemoteDataSource _remote;
+
+  Future<void> _onUnmatch(
+    MatchUnmatched event,
+    Emitter<MatchesState> emit,
+  ) async {
+    // Optimistic: drop the row immediately, restore it if the call fails.
+    final previous = state.matches;
+    emit(state.copyWith(
+      matches: previous.where((m) => m.id != event.matchId).toList(),
+    ));
+    try {
+      await _remote.unmatch(event.matchId);
+    } catch (e) {
+      emit(state.copyWith(
+        status: MatchesStatus.error,
+        matches: previous,
+        errorMessage: Failure.fromDio(e).message,
+      ));
+    }
+  }
 
   Future<void> _onLoad(MatchesLoaded event, Emitter<MatchesState> emit) async {
     emit(state.copyWith(status: MatchesStatus.loading));

@@ -86,6 +86,17 @@ class AuthRemoteDataSource {
 
   Future<AppUser> me() async {
     final response = await _dio.get('/me');
+    if (response.statusCode != 200) {
+      // validateStatus accepts everything < 500, so a 401 (revoked/missing
+      // bearer) arrives here as a Response with a {message} body, not a throw.
+      // Surface it as a DioException so Failure.fromDio carries the 401 status
+      // — otherwise `data['data'] as Map` below throws an opaque cast error and
+      // the caller can't tell a real "signed out" from a transient hiccup.
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    }
     final data = response.data as Map<String, dynamic>;
     return AppUser.fromJson(data['data'] as Map<String, dynamic>);
   }

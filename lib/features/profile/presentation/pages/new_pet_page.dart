@@ -5,7 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/di/injector.dart';
 import '../../../../shared/models/pet.dart';
+import '../../data/breed_remote_data_source.dart';
 import '../bloc/pet_bloc.dart';
 
 class NewPetPage extends StatefulWidget {
@@ -41,7 +43,17 @@ class _NewPetPageState extends State<NewPetPage> {
   late PetType _type;
   late PetGender _gender;
   DateTime? _birthdate;
-  XFile? _pickedPhoto;
+  final List<XFile> _pickedPhotos = [];
+
+  static const _maxPhotos = 6;
+
+  // Breed: a creatable dropdown sourced from the backend catalogue for the
+  // selected species, with an "add new" escape hatch for breeds not listed.
+  late final TextEditingController _newBreedCtrl;
+  String? _breed;
+  List<String> _breeds = const [];
+  bool _loadingBreeds = false;
+  bool _addingNewBreed = false;
 
   bool get _isEdit => widget.initialPet != null;
 
@@ -55,6 +67,9 @@ class _NewPetPageState extends State<NewPetPage> {
     _type = pet?.type ?? PetType.dog;
     _gender = pet?.gender ?? PetGender.female;
     _birthdate = pet?.birthdate;
+    _breed = pet?.breed;
+    _newBreedCtrl = TextEditingController();
+    _loadBreeds();
   }
 
   @override
@@ -62,19 +77,44 @@ class _NewPetPageState extends State<NewPetPage> {
     _nameCtrl.dispose();
     _bioCtrl.dispose();
     _locationCtrl.dispose();
+    _newBreedCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickPhoto() async {
+  Future<void> _pickPhotos() async {
+    final existing = widget.initialPet?.photos.length ?? 0;
+    final remaining = _maxPhotos - existing - _pickedPhotos.length;
+    if (remaining <= 0) return;
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1600,
-      imageQuality: 85,
-    );
-    if (picked != null) {
-      setState(() => _pickedPhoto = picked);
+    final picked = await picker.pickMultiImage(maxWidth: 1600, imageQuality: 85);
+    if (picked.isEmpty) return;
+    setState(() => _pickedPhotos.addAll(picked.take(remaining)));
+  }
+
+  Future<void> _loadBreeds() async {
+    setState(() => _loadingBreeds = true);
+    try {
+      final breeds =
+          await getIt<BreedRemoteDataSource>().fetchBreeds(_type.name);
+      if (!mounted) return;
+      setState(() => _breeds = breeds);
+    } catch (_) {
+      // Best-effort: the field still works as free text via "add new".
+      if (!mounted) return;
+      setState(() => _breeds = const []);
+    } finally {
+      if (mounted) setState(() => _loadingBreeds = false);
     }
+  }
+
+  void _onTypeChanged(PetType t) {
+    setState(() {
+      _type = t;
+      // Different species → different breed list; reset the dropdown choice
+      // (a typed custom breed is kept).
+      if (!_addingNewBreed) _breed = null;
+    });
+    _loadBreeds();
   }
 
   void _submit() {
@@ -84,16 +124,22 @@ class _NewPetPageState extends State<NewPetPage> {
     final location = _locationCtrl.text.trim();
     final pet = widget.initialPet;
 
+    final breedRaw =
+        _addingNewBreed ? _newBreedCtrl.text.trim() : (_breed ?? '');
+    final breed = breedRaw.isEmpty ? null : breedRaw;
+    final photoPaths = _pickedPhotos.map((x) => x.path).toList();
+
     if (pet == null) {
       context.read<PetBloc>().add(PetCreated(
             type: _type,
             gender: _gender,
             name: _nameCtrl.text.trim(),
+            breed: breed,
             bio: bio.isEmpty ? null : bio,
             birthdate: _birthdate,
             locationName: location.isEmpty ? null : location,
             primaryPhotoUrl: null,
-            photoFilePath: _pickedPhoto?.path,
+            photoFilePaths: photoPaths,
           ));
     } else {
       context.read<PetBloc>().add(PetUpdated(
@@ -101,6 +147,8 @@ class _NewPetPageState extends State<NewPetPage> {
             type: _type,
             gender: _gender,
             name: _nameCtrl.text.trim(),
+            breed: breed,
+            clearBreed: breed == null && (pet.breed?.isNotEmpty ?? false),
             bio: bio.isEmpty ? null : bio,
             clearBio: bio.isEmpty && (pet.bio?.isNotEmpty ?? false),
             birthdate: _birthdate,
@@ -108,9 +156,78 @@ class _NewPetPageState extends State<NewPetPage> {
             locationName: location.isEmpty ? null : location,
             clearLocationName:
                 location.isEmpty && (pet.locationName?.isNotEmpty ?? false),
-            photoFilePath: _pickedPhoto?.path,
+            photoFilePaths: photoPaths,
           ));
     }
+  }
+
+  Widget _buildBreedField(BuildContext context) {
+    if (_addingNewBreed) {
+      return Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: _newBreedCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Breed',
+                hintText: 'Type your pet’s breed',
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Pick from the list instead',
+            icon: const Icon(Icons.close),
+            onPressed: () => setState(() {
+              _addingNewBreed = false;
+              _newBreedCtrl.clear();
+            }),
+          ),
+        ],
+      );
+    }
+
+    const addNewValue = '__add_new__';
+    // Keep a typed custom breed selectable even if it isn't in the catalogue.
+    final items = <String>{
+      ..._breeds,
+      if (_breed != null && _breed!.isNotEmpty) _breed!,
+    }.toList();
+
+    return DropdownButtonFormField<String>(
+      initialValue: _breed,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Breed (optional)',
+        suffixIcon: _loadingBreeds
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : null,
+      ),
+      items: [
+        for (final b in items) DropdownMenuItem(value: b, child: Text(b)),
+        const DropdownMenuItem(
+          value: addNewValue,
+          child: Text('➕ Add a new breed'),
+        ),
+      ],
+      onChanged: (value) {
+        if (value == addNewValue) {
+          setState(() {
+            _addingNewBreed = true;
+            _newBreedCtrl.text = '';
+          });
+        } else {
+          setState(() => _breed = value);
+        }
+      },
+    );
   }
 
   @override
@@ -144,13 +261,15 @@ class _NewPetPageState extends State<NewPetPage> {
                 const SizedBox(height: 16),
                 _SegmentedTypePicker(
                   value: _type,
-                  onChanged: (t) => setState(() => _type = t),
+                  onChanged: _onTypeChanged,
                 ),
                 const SizedBox(height: 12),
                 _SegmentedGenderPicker(
                   value: _gender,
                   onChanged: (g) => setState(() => _gender = g),
                 ),
+                const SizedBox(height: 16),
+                _buildBreedField(context),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _nameCtrl,
@@ -174,11 +293,12 @@ class _NewPetPageState extends State<NewPetPage> {
                       const InputDecoration(labelText: 'City / location'),
                 ),
                 const SizedBox(height: 12),
-                _PhotoPickerTile(
-                  picked: _pickedPhoto,
-                  existingPhotoUrl: widget.initialPet?.primaryPhotoUrl,
-                  onPick: _pickPhoto,
-                  onClear: () => setState(() => _pickedPhoto = null),
+                _PhotosField(
+                  existing: widget.initialPet?.photos ?? const [],
+                  picked: _pickedPhotos,
+                  max: _maxPhotos,
+                  onAdd: _pickPhotos,
+                  onRemoveAt: (i) => setState(() => _pickedPhotos.removeAt(i)),
                 ),
                 const SizedBox(height: 12),
                 ListTile(
@@ -240,100 +360,143 @@ class _NewPetPageState extends State<NewPetPage> {
   }
 }
 
-class _PhotoPickerTile extends StatelessWidget {
-  const _PhotoPickerTile({
+class _PhotosField extends StatelessWidget {
+  const _PhotosField({
+    required this.existing,
     required this.picked,
-    required this.onPick,
-    required this.onClear,
-    this.existingPhotoUrl,
+    required this.max,
+    required this.onAdd,
+    required this.onRemoveAt,
   });
 
-  final XFile? picked;
-  final String? existingPhotoUrl;
-  final VoidCallback onPick;
-  final VoidCallback onClear;
+  /// Photos already saved on the pet (edit mode) — shown read-only.
+  final List<PetPhoto> existing;
+
+  /// Newly picked photos, not yet uploaded.
+  final List<XFile> picked;
+  final int max;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemoveAt;
 
   @override
   Widget build(BuildContext context) {
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(20),
-      side: const BorderSide(color: Color(0xFFF5EAD0)),
-    );
-    if (picked == null) {
-      if (existingPhotoUrl != null) {
-        return Material(
-          shape: shape,
-          color: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    existingPhotoUrl!,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: Icon(Icons.broken_image_outlined),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Current primary photo',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                TextButton(
-                  onPressed: onPick,
-                  child: const Text('Replace'),
-                ),
-              ],
+    final total = existing.length + picked.length;
+    final canAdd = total < max;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            'Photos ($total/$max)',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+        SizedBox(
+          height: 96,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: existing.length + picked.length + (canAdd ? 1 : 0),
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              if (i < existing.length) {
+                return _Thumb(image: NetworkImage(existing[i].url));
+              }
+              final pickedIndex = i - existing.length;
+              if (pickedIndex < picked.length) {
+                return _Thumb(
+                  image: FileImage(File(picked[pickedIndex].path)),
+                  onRemove: () => onRemoveAt(pickedIndex),
+                );
+              }
+              return _AddPhotoTile(onTap: onAdd);
+            },
+          ),
+        ),
+        if (picked.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 6),
+            child: Text(
+              'New photos upload after the pet is saved.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-        );
-      }
-      return ListTile(
-        shape: shape,
-        tileColor: Colors.white,
-        leading: const Icon(Icons.image_outlined),
-        title: const Text('Add a primary photo'),
-        subtitle: const Text('Tap to pick from gallery'),
-        onTap: onPick,
-      );
-    }
-    return Material(
-      shape: shape,
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
+      ],
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.image, this.onRemove});
+
+  final ImageProvider image;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image(
+            image: image,
+            width: 96,
+            height: 96,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(
+              width: 96,
+              height: 96,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+        if (onRemove != null)
+          Positioned(
+            top: 2,
+            right: 2,
+            child: InkResponse(
+              onTap: onRemove,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(2),
+                child: const Icon(Icons.close, size: 16, color: Colors.white),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AddPhotoTile extends StatelessWidget {
+  const _AddPhotoTile({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 96,
+        height: 96,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: const Border.fromBorderSide(
+            BorderSide(color: Color(0xFFF5EAD0)),
+          ),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                File(picked!.path),
-                width: 64,
-                height: 64,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Photo ready — uploads after the pet is saved.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: onClear,
-            ),
+            Icon(Icons.add_a_photo_outlined),
+            SizedBox(height: 4),
+            Text('Add', style: TextStyle(fontSize: 12)),
           ],
         ),
       ),

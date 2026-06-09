@@ -50,16 +50,20 @@ class PetDetailPage extends StatelessWidget {
           );
         }
 
-        return _PetDetailView(pet: pet);
+        return PetProfileView(pet: pet);
       },
     );
   }
 }
 
-class _PetDetailView extends StatelessWidget {
-  const _PetDetailView({required this.pet});
+/// Renders a pet's full profile (hero gallery, chips, bio, photos,
+/// vaccinations). Reused for the owner's own pet (with edit/delete actions)
+/// and, with [owner] = false, as a read-only view of a discovered pet.
+class PetProfileView extends StatelessWidget {
+  const PetProfileView({super.key, required this.pet, this.owner = true});
 
   final Pet pet;
+  final bool owner;
 
   @override
   Widget build(BuildContext context) {
@@ -75,27 +79,29 @@ class _PetDetailView extends StatelessWidget {
             expandedHeight: 320,
             pinned: true,
             actions: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Edit ${pet.name}',
-                onPressed: () => context.push('/profile/pet/${pet.id}/edit'),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (v) async {
-                  if (v == 'delete') {
-                    await _confirmDelete(context, pet);
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: ListTile(
-                      leading: Icon(Icons.delete_outline),
-                      title: Text('Delete pet'),
+              if (owner) ...[
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Edit ${pet.name}',
+                  onPressed: () => context.push('/profile/pet/${pet.id}/edit'),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (v) async {
+                    if (v == 'delete') {
+                      await _confirmDelete(context, pet);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete pet'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
@@ -119,6 +125,11 @@ class _PetDetailView extends StatelessWidget {
                       icon: Icons.pets_outlined,
                       label: pet.type.name.toUpperCase(),
                     ),
+                    if (pet.breed != null && pet.breed!.trim().isNotEmpty)
+                      _Chip(
+                        icon: Icons.badge_outlined,
+                        label: pet.breed!,
+                      ),
                     _Chip(
                       icon: pet.gender == PetGender.male
                           ? Icons.male
@@ -238,13 +249,15 @@ class _PetDetailView extends StatelessWidget {
                       ),
                     ),
                   ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () =>
-                      context.push('/profile/pet/${pet.id}/edit'),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit pet profile'),
-                ),
+                if (owner) ...[
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        context.push('/profile/pet/${pet.id}/edit'),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit pet profile'),
+                  ),
+                ],
               ],
             ),
           ),

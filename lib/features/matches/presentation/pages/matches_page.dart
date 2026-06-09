@@ -46,6 +46,39 @@ class _MatchesPageState extends State<MatchesPage> {
     super.dispose();
   }
 
+  Future<void> _confirmUnmatch(
+    BuildContext context,
+    int matchId,
+    String name,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final bloc = context.read<MatchesBloc>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Unmatch?'),
+        content: Text(
+          'This removes your match with $name and deletes the conversation '
+          'for both of you. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Unmatch'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      bloc.add(MatchUnmatched(matchId));
+      messenger.showSnackBar(SnackBar(content: Text('Unmatched from $name.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userId = context.watch<AuthBloc>().state.user?.id ?? -1;
@@ -143,11 +176,15 @@ class _MatchesPageState extends State<MatchesPage> {
                                   .read<MatchesBloc>()
                                   .add(const MatchesLoaded()),
                             );
+                          } else if (value == 'unmatch') {
+                            _confirmUnmatch(context, match.id, other.name);
                           }
                         },
                         itemBuilder: (_) => const [
                           PopupMenuItem(value: 'report', child: Text('Report')),
                           PopupMenuItem(value: 'block', child: Text('Block')),
+                          PopupMenuItem(
+                              value: 'unmatch', child: Text('Unmatch')),
                         ],
                       ),
                     ],
@@ -161,7 +198,8 @@ class _MatchesPageState extends State<MatchesPage> {
                         '/chat/${match.conversationId}'
                         '?title=${Uri.encodeComponent(other.name)}'
                         '&peerPetId=${other.id}'
-                        '&peerUserId=${other.userId}',
+                        '&peerUserId=${other.userId}'
+                        '&matchId=${match.id}',
                       );
                       if (context.mounted) {
                         context.read<MatchesBloc>().add(const MatchesLoaded());

@@ -60,6 +60,7 @@ class Pet extends Equatable {
     required this.type,
     required this.gender,
     required this.name,
+    this.breed,
     this.bio,
     this.birthdate,
     this.locationLat,
@@ -76,6 +77,7 @@ class Pet extends Equatable {
   final PetType type;
   final PetGender gender;
   final String name;
+  final String? breed;
   final String? bio;
   final DateTime? birthdate;
   final double? locationLat;
@@ -94,6 +96,7 @@ class Pet extends Equatable {
       type: _petTypeFrom(json['type'] as String),
       gender: _petGenderFrom(json['gender'] as String),
       name: json['name'] as String,
+      breed: json['breed'] as String?,
       bio: json['bio'] as String?,
       birthdate: json['birthdate'] != null
           ? DateTime.tryParse(json['birthdate'] as String)
@@ -119,6 +122,7 @@ class Pet extends Equatable {
         type,
         gender,
         name,
+        breed,
         bio,
         birthdate,
         locationLat,

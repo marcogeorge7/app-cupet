@@ -20,38 +20,41 @@ class PetCreated extends PetEvent {
     required this.type,
     required this.gender,
     required this.name,
+    this.breed,
     this.bio,
     this.birthdate,
     this.lat,
     this.lng,
     this.locationName,
     this.primaryPhotoUrl,
-    this.photoFilePath,
+    this.photoFilePaths = const [],
   });
 
   final PetType type;
   final PetGender gender;
   final String name;
+  final String? breed;
   final String? bio;
   final DateTime? birthdate;
   final double? lat;
   final double? lng;
   final String? locationName;
   final String? primaryPhotoUrl;
-  final String? photoFilePath;
+  final List<String> photoFilePaths;
 
   @override
   List<Object?> get props => [
         type,
         gender,
         name,
+        breed,
         bio,
         birthdate,
         lat,
         lng,
         locationName,
         primaryPhotoUrl,
-        photoFilePath,
+        photoFilePaths,
       ];
 }
 
@@ -61,6 +64,8 @@ class PetUpdated extends PetEvent {
     this.type,
     this.gender,
     this.name,
+    this.breed,
+    this.clearBreed = false,
     this.bio,
     this.clearBio = false,
     this.birthdate,
@@ -70,13 +75,15 @@ class PetUpdated extends PetEvent {
     this.locationName,
     this.clearLocationName = false,
     this.primaryPhotoUrl,
-    this.photoFilePath,
+    this.photoFilePaths = const [],
   });
 
   final int id;
   final PetType? type;
   final PetGender? gender;
   final String? name;
+  final String? breed;
+  final bool clearBreed;
   final String? bio;
   final bool clearBio;
   final DateTime? birthdate;
@@ -86,7 +93,7 @@ class PetUpdated extends PetEvent {
   final String? locationName;
   final bool clearLocationName;
   final String? primaryPhotoUrl;
-  final String? photoFilePath;
+  final List<String> photoFilePaths;
 
   @override
   List<Object?> get props => [
@@ -94,6 +101,8 @@ class PetUpdated extends PetEvent {
         type,
         gender,
         name,
+        breed,
+        clearBreed,
         bio,
         clearBio,
         birthdate,
@@ -103,7 +112,7 @@ class PetUpdated extends PetEvent {
         locationName,
         clearLocationName,
         primaryPhotoUrl,
-        photoFilePath,
+        photoFilePaths,
       ];
 }
 
@@ -170,6 +179,7 @@ class PetBloc extends Bloc<PetEvent, PetState> {
         type: event.type,
         gender: event.gender,
         name: event.name,
+        breed: event.breed,
         bio: event.bio,
         birthdate: event.birthdate,
         lat: event.lat,
@@ -177,11 +187,11 @@ class PetBloc extends Bloc<PetEvent, PetState> {
         locationName: event.locationName,
         primaryPhotoUrl: event.primaryPhotoUrl,
       );
-      if (event.photoFilePath != null) {
+      if (event.photoFilePaths.isNotEmpty) {
         try {
-          pet = await _repository.uploadPrimaryPhoto(
+          pet = await _repository.uploadPhotos(
             petId: pet.id,
-            filePath: event.photoFilePath!,
+            filePaths: event.photoFilePaths,
           );
         } catch (_) {
           // photo upload best-effort — pet still saved
@@ -204,6 +214,11 @@ class PetBloc extends Bloc<PetEvent, PetState> {
       if (event.type != null) payload['type'] = event.type!.name;
       if (event.gender != null) payload['gender'] = event.gender!.name;
       if (event.name != null) payload['name'] = event.name;
+      if (event.clearBreed) {
+        payload['breed'] = null;
+      } else if (event.breed != null) {
+        payload['breed'] = event.breed;
+      }
       if (event.clearBio) {
         payload['bio'] = null;
       } else if (event.bio != null) {
@@ -230,11 +245,11 @@ class PetBloc extends Bloc<PetEvent, PetState> {
           ? state.pets.firstWhere((p) => p.id == event.id)
           : await _repository.update(event.id, payload);
 
-      if (event.photoFilePath != null) {
+      if (event.photoFilePaths.isNotEmpty) {
         try {
-          pet = await _repository.uploadPrimaryPhoto(
+          pet = await _repository.uploadPhotos(
             petId: event.id,
-            filePath: event.photoFilePath!,
+            filePaths: event.photoFilePaths,
           );
         } catch (_) {
           // photo upload best-effort — text fields already saved

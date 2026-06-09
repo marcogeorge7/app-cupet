@@ -1,6 +1,7 @@
 import 'package:appinio_swiper/appinio_swiper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../shared/models/pet.dart';
 import '../../../../shared/widgets/empty_state.dart';
@@ -251,6 +252,13 @@ class _DiscoverPageState extends State<DiscoverPage> {
                                         'deck-${state.deck.map((p) => p.id).join(',')}',
                                       ),
                                       controller: _swiper,
+                                      // Tinder-style: only left (pass) / right
+                                      // (like). Blocks accidental vertical
+                                      // swipes from being recorded.
+                                      swipeOptions:
+                                          const SwipeOptions.symmetric(
+                                        horizontal: true,
+                                      ),
                                       cardCount: state.deck.length,
                                       // Last card swiped → fetch a fresh deck
                                       // (backend excludes already-swiped pets).
@@ -262,17 +270,32 @@ class _DiscoverPageState extends State<DiscoverPage> {
                                               .add(DeckLoaded(_activePet!.id));
                                         }
                                       },
-                                      cardBuilder: (_, i) =>
-                                          PetCard(pet: state.deck[i]),
+                                      cardBuilder: (_, i) => PetCard(
+                                        pet: state.deck[i],
+                                        onTap: () => context.push(
+                                          '/pet-profile',
+                                          extra: state.deck[i],
+                                        ),
+                                      ),
                                       onSwipeEnd: (prev, target, activity) {
-                                        final pet = state.deck.length > prev
+                                        // Only real swipes carry a direction;
+                                        // ignore unswipe/cancel activities.
+                                        if (activity is! Swipe) return;
+                                        final pet = prev < state.deck.length
                                             ? state.deck[prev]
                                             : null;
                                         if (pet == null ||
                                             _activePet == null) {
                                           return;
                                         }
-                                        final liked = target > prev; // right
+                                        // Right = like, left = pass. NB: the
+                                        // card index (`target`) advances on EVERY
+                                        // swipe, so it can't tell direction —
+                                        // `activity.direction` is the source of
+                                        // truth (this was the swipe-left-matched
+                                        // bug).
+                                        final liked = activity.direction ==
+                                            AxisDirection.right;
                                         context.read<DiscoverBloc>().add(
                                               CardSwiped(
                                                 fromPetId: _activePet!.id,
