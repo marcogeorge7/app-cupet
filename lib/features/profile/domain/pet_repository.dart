@@ -108,4 +108,26 @@ class PetRepository {
         givenAt: givenAt,
         certificateUrl: certificateUrl,
       );
+
+  /// Save a batch of vaccination drafts (uploading any picked certificate
+  /// files), then reload the pet so its `vaccinations[]` reflects the
+  /// additions.
+  Future<Pet> addVaccinations(
+    int petId,
+    List<VaccinationDraft> vaccinations,
+  ) async {
+    try {
+      for (final v in vaccinations) {
+        await _remote.addVaccination(
+          petId,
+          name: v.name,
+          givenAt: v.givenAt,
+          certificateFilePath: v.certificateFilePath,
+        );
+      }
+      return await _remote.getPet(petId);
+    } catch (e) {
+      throw Failure.fromDio(e);
+    }
+  }
 }

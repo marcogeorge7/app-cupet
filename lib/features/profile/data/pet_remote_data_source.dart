@@ -62,10 +62,30 @@ class PetRemoteDataSource {
     required String name,
     DateTime? givenAt,
     String? certificateUrl,
+    String? certificateFilePath,
   }) async {
+    final givenAtStr = givenAt?.toIso8601String().substring(0, 10);
+
+    // When the user picked a local certificate file, send it as multipart so
+    // the backend stores it (mirroring photo uploads); otherwise send JSON
+    // with an optional externally hosted URL.
+    if (certificateFilePath != null) {
+      final form = FormData.fromMap({
+        'name': name,
+        'given_at': ?givenAtStr,
+        'certificate': await MultipartFile.fromFile(certificateFilePath),
+      });
+      await _dio.post(
+        '/pets/$petId/vaccinations',
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+      return;
+    }
+
     await _dio.post('/pets/$petId/vaccinations', data: {
       'name': name,
-      if (givenAt != null) 'given_at': givenAt.toIso8601String().substring(0, 10),
+      'given_at': ?givenAtStr,
       'certificate_url': ?certificateUrl,
     });
   }

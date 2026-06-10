@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../shared/models/pet.dart';
 import '../../../../shared/widgets/germeen.dart';
@@ -246,6 +247,14 @@ class PetProfileView extends StatelessWidget {
                         subtitle: v.givenAt != null
                             ? Text('Given ${_formatDate(v.givenAt!)}')
                             : null,
+                        trailing: v.certificateUrl != null
+                            ? TextButton.icon(
+                                onPressed: () =>
+                                    _openCertificate(v.certificateUrl!),
+                                icon: const Icon(Icons.description_outlined),
+                                label: const Text('Certificate'),
+                              )
+                            : null,
                       ),
                     ),
                   ),
@@ -290,6 +299,14 @@ class PetProfileView extends StatelessWidget {
     if (confirmed == true && context.mounted) {
       context.read<PetBloc>().add(PetDeleted(pet.id));
       if (context.mounted) context.go('/profile');
+    }
+  }
+
+  static Future<void> _openCertificate(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 

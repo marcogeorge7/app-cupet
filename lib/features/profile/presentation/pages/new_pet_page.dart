@@ -45,6 +45,9 @@ class _NewPetPageState extends State<NewPetPage> {
   DateTime? _birthdate;
   final List<XFile> _pickedPhotos = [];
 
+  /// Vaccinations entered in this session, uploaded after the pet is saved.
+  final List<VaccinationDraft> _newVaccinations = [];
+
   static const _maxPhotos = 6;
 
   // Breed: a creatable dropdown sourced from the backend catalogue for the
@@ -140,6 +143,7 @@ class _NewPetPageState extends State<NewPetPage> {
             locationName: location.isEmpty ? null : location,
             primaryPhotoUrl: null,
             photoFilePaths: photoPaths,
+            newVaccinations: List.of(_newVaccinations),
           ));
     } else {
       context.read<PetBloc>().add(PetUpdated(
@@ -157,8 +161,18 @@ class _NewPetPageState extends State<NewPetPage> {
             clearLocationName:
                 location.isEmpty && (pet.locationName?.isNotEmpty ?? false),
             photoFilePaths: photoPaths,
+            newVaccinations: List.of(_newVaccinations),
           ));
     }
+  }
+
+  Future<void> _addVaccination() async {
+    final draft = await showModalBottomSheet<VaccinationDraft>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _AddVaccinationSheet(),
+    );
+    if (draft != null) setState(() => _newVaccinations.add(draft));
   }
 
   Widget _buildBreedField(BuildContext context) {
@@ -321,6 +335,14 @@ class _NewPetPageState extends State<NewPetPage> {
                     );
                     if (picked != null) setState(() => _birthdate = picked);
                   },
+                ),
+                const SizedBox(height: 12),
+                _VaccinationsField(
+                  existing: widget.initialPet?.vaccinations ?? const [],
+                  drafts: _newVaccinations,
+                  onAdd: _addVaccination,
+                  onRemoveDraftAt: (i) =>
+                      setState(() => _newVaccinations.removeAt(i)),
                 ),
                 const SizedBox(height: 24),
                 BlocBuilder<PetBloc, PetState>(
@@ -497,6 +519,249 @@ class _AddPhotoTile extends StatelessWidget {
             Icon(Icons.add_a_photo_outlined),
             SizedBox(height: 4),
             Text('Add', style: TextStyle(fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VaccinationsField extends StatelessWidget {
+  const _VaccinationsField({
+    required this.existing,
+    required this.drafts,
+    required this.onAdd,
+    required this.onRemoveDraftAt,
+  });
+
+  /// Vaccinations already saved on the pet (edit mode) — shown read-only.
+  final List<Vaccination> existing;
+
+  /// Vaccinations entered this session, not yet uploaded.
+  final List<VaccinationDraft> drafts;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemoveDraftAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = existing.length + drafts.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            'Vaccinations ($total)',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+        for (final v in existing)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: const Icon(Icons.vaccines_outlined),
+              title: Text(v.name),
+              subtitle: v.givenAt != null
+                  ? Text('Given ${_shortDate(v.givenAt!)}')
+                  : null,
+              trailing: v.certificateUrl != null
+                  ? const Icon(Icons.verified_outlined, color: Colors.green)
+                  : null,
+            ),
+          ),
+        for (var i = 0; i < drafts.length; i++)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: const Icon(Icons.vaccines_outlined),
+              title: Text(drafts[i].name),
+              subtitle: Text([
+                if (drafts[i].givenAt != null)
+                  'Given ${_shortDate(drafts[i].givenAt!)}',
+                if (drafts[i].certificateFilePath != null)
+                  'Certificate attached'
+                else
+                  'No certificate',
+              ].join(' · ')),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Remove',
+                onPressed: () => onRemoveDraftAt(i),
+              ),
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: const Text('Add vaccination'),
+          ),
+        ),
+        if (drafts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 6),
+            child: Text(
+              'New vaccinations save after the pet is saved.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+      ],
+    );
+  }
+
+  static String _shortDate(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+/// Bottom sheet that collects a single vaccination (name, optional date,
+/// optional certificate image) and pops with a [VaccinationDraft].
+class _AddVaccinationSheet extends StatefulWidget {
+  const _AddVaccinationSheet();
+
+  @override
+  State<_AddVaccinationSheet> createState() => _AddVaccinationSheetState();
+}
+
+class _AddVaccinationSheetState extends State<_AddVaccinationSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  DateTime? _givenAt;
+  XFile? _certificate;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickCertificate() async {
+    // Gallery only — matches the photo flow and avoids a camera permission.
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 2000,
+      imageQuality: 85,
+    );
+    if (picked != null) setState(() => _certificate = picked);
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(
+      context,
+      VaccinationDraft(
+        name: _nameCtrl.text.trim(),
+        givenAt: _givenAt,
+        certificateFilePath: _certificate?.path,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Add vaccination',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nameCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Vaccine name',
+                hintText: 'e.g. Rabies, DHPP',
+              ),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFF5EAD0)),
+              ),
+              title: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(
+                  _givenAt == null
+                      ? 'Date given (optional)'
+                      : _VaccinationsField._shortDate(_givenAt!),
+                ),
+              ),
+              trailing: const Padding(
+                padding: EdgeInsets.only(right: 12),
+                child: Icon(Icons.calendar_today),
+              ),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now(),
+                  initialDate: _givenAt ?? DateTime.now(),
+                );
+                if (picked != null) setState(() => _givenAt = picked);
+              },
+            ),
+            const SizedBox(height: 12),
+            if (_certificate != null)
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      File(_certificate!.path),
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.description_outlined,
+                        size: 40,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Certificate attached')),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Remove certificate',
+                    onPressed: () => setState(() => _certificate = null),
+                  ),
+                ],
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: _pickCertificate,
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Attach certificate'),
+              ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _save,
+                    child: const Text('Add'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

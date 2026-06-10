@@ -28,6 +28,7 @@ class PetCreated extends PetEvent {
     this.locationName,
     this.primaryPhotoUrl,
     this.photoFilePaths = const [],
+    this.newVaccinations = const [],
   });
 
   final PetType type;
@@ -41,6 +42,7 @@ class PetCreated extends PetEvent {
   final String? locationName;
   final String? primaryPhotoUrl;
   final List<String> photoFilePaths;
+  final List<VaccinationDraft> newVaccinations;
 
   @override
   List<Object?> get props => [
@@ -55,6 +57,7 @@ class PetCreated extends PetEvent {
         locationName,
         primaryPhotoUrl,
         photoFilePaths,
+        newVaccinations,
       ];
 }
 
@@ -76,6 +79,7 @@ class PetUpdated extends PetEvent {
     this.clearLocationName = false,
     this.primaryPhotoUrl,
     this.photoFilePaths = const [],
+    this.newVaccinations = const [],
   });
 
   final int id;
@@ -94,6 +98,7 @@ class PetUpdated extends PetEvent {
   final bool clearLocationName;
   final String? primaryPhotoUrl;
   final List<String> photoFilePaths;
+  final List<VaccinationDraft> newVaccinations;
 
   @override
   List<Object?> get props => [
@@ -113,6 +118,7 @@ class PetUpdated extends PetEvent {
         clearLocationName,
         primaryPhotoUrl,
         photoFilePaths,
+        newVaccinations,
       ];
 }
 
@@ -197,6 +203,16 @@ class PetBloc extends Bloc<PetEvent, PetState> {
           // photo upload best-effort — pet still saved
         }
       }
+      if (event.newVaccinations.isNotEmpty) {
+        try {
+          pet = await _repository.addVaccinations(
+            pet.id,
+            event.newVaccinations,
+          );
+        } catch (_) {
+          // vaccination upload best-effort — pet still saved
+        }
+      }
       emit(state.copyWith(status: PetStatus.ready, pets: [pet, ...state.pets]));
     } on Failure catch (e) {
       emit(state.copyWith(status: PetStatus.error, errorMessage: e.message));
@@ -253,6 +269,17 @@ class PetBloc extends Bloc<PetEvent, PetState> {
           );
         } catch (_) {
           // photo upload best-effort — text fields already saved
+        }
+      }
+
+      if (event.newVaccinations.isNotEmpty) {
+        try {
+          pet = await _repository.addVaccinations(
+            event.id,
+            event.newVaccinations,
+          );
+        } catch (_) {
+          // vaccination upload best-effort — text fields already saved
         }
       }
 

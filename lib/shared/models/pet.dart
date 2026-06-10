@@ -53,6 +53,24 @@ class Vaccination extends Equatable {
   List<Object?> get props => [id, name, givenAt, certificateUrl];
 }
 
+/// A vaccination the user has entered in the edit form but not yet saved.
+/// [certificateFilePath] points at a locally picked file (image or PDF) that
+/// is uploaded to the backend after the pet is saved.
+class VaccinationDraft extends Equatable {
+  const VaccinationDraft({
+    required this.name,
+    this.givenAt,
+    this.certificateFilePath,
+  });
+
+  final String name;
+  final DateTime? givenAt;
+  final String? certificateFilePath;
+
+  @override
+  List<Object?> get props => [name, givenAt, certificateFilePath];
+}
+
 class Pet extends Equatable {
   const Pet({
     required this.id,
