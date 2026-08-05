@@ -44,11 +44,12 @@ platform :ios do
       # The "Print full build log on failure" workflow step still dumps the
       # complete gym log if anything breaks.
       suppress_xcode_output: true,
-      # ARCHIVE with AUTOMATIC signing. A global manual profile (xcargs) gets
-      # applied to every target, but the Swift Package / Pod dependencies
-      # (Firebase, GoogleUtilities, AblyDeltaCodec, …) can't take a provisioning
-      # profile and error out. The API key + imported dist cert let Xcode resolve
-      # the Runner app's signing; dependencies sign with no profile, as required.
+      # ARCHIVE with MANUAL signing, pinned on the Runner target itself
+      # (project.pbxproj: CODE_SIGN_STYLE=Manual, PROVISIONING_PROFILE_SPECIFIER
+      # matches the "CuPet" profile fetched above). Scoping it to the target
+      # (rather than a global xcargs override) keeps the Swift Package / Pod
+      # dependencies (Firebase, GoogleUtilities, AblyDeltaCodec, …) signing with
+      # no profile, as required — a global override previously broke them.
       xcargs: "-allowProvisioningUpdates " \
               "-authenticationKeyPath #{key_path} " \
               "-authenticationKeyID #{key_id} " \
