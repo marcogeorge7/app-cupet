@@ -51,7 +51,7 @@
 		<true/>
 	</dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>CuPet may save shared pet photos back to your library.</string>
+	<string>Cupet may save shared pet photos back to your library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>CuPet needs photo library access to add pet photos to your profile.</string>
 	<key>UIApplicationSceneManifest</key>
